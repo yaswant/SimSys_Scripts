@@ -5,13 +5,12 @@ import os
 class GnuWarning:
     """Class to describe detection and extraction of a message
     warning from the GNU compiler"""
-
-    #Number of lines for a warning
-    startoffset = -4
-    endoffset = 1
-
+  
     #String to detect a warning
     startstr = "Warning:"
+
+    #Dictionary of line offsets as these may vary depending on the warning type
+    offsetdict = {'default': (-4,1)}
 
     def foundmessage(self,line):
         """Takes line(str) and returns True if a message is found"""
@@ -21,15 +20,19 @@ class GnuWarning:
             return False
 
     def getoffsets(self,reflineno):
-        """Takes reflineno(int)
+        """Takes reflineno(int) and line(str)
         Returns two integers
         """
 
-        startline = reflineno + self.startoffset
+        warningtype = "default"
+
+        #Overide the warning type as needed by searching line
+
+        startline = reflineno + self.offsetdict[warningtype][0]
         if startline <= 0:
             raise ValueError("Start line less than zero")
         
-        endline = reflineno + self.endoffset
+        endline = reflineno + self.offsetdict[warningtype][1]
         if endline <= 0:
             raise ValueError("End line less than zero")
         
@@ -41,6 +44,18 @@ class GnuWarning:
         
         Could be embellished to curate the message further
         """
+
+        #Basic checks- for this compiler we expect:
+        #-path to the source file in the first line
+        #-self.startstr in the last line
+
+        if not lines[0].find("/src/"):
+            print(lines[0])
+            raise ValueError("Expecting first line of warning to contain /src/")
+
+        if not lines[-1].find(self.startstr):
+            raise ValueError("Expecting line of warning to contain " + self.startstr)
+
         return lines
 
 
@@ -107,9 +122,7 @@ def main():
 
     extracted_messages = _find_message(extracted_lines,searchparams)
 
-    #Print a sample message
-    for line in extracted_messages[0]:
-        print(line)
+    print("Extacted " + str(len(extracted_messages)) + " compiler warnings")
 
     return
 
