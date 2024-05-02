@@ -3,15 +3,15 @@
 import os
 
 class Warning:
-    """Class to describe detection and extraction of a message
-    warning from the GNU compiler"""
+    """Parent class to describe detection and extraction of a message
+    warning from a generic compiler"""
   
     def __init__(self):
         #String to detect a warning
         self.startstr = "warning:"
 
         #Dictionary of line offsets as these may vary depending on the warning type
-        self.offsetdict = {'Bar': (1,1)}
+        self.offsetdict = {'default': (1,1)}
 
     def foundmessage(self,line):
         """Takes line(str) and returns True if a message is found"""
@@ -24,10 +24,7 @@ class Warning:
         """Takes reflineno(int) and line(str)
         Returns two integers
         """
-
         warningtype = "default"
-
-        #Overide the warning type as needed by searching line
 
         startline = reflineno + self.offsetdict[warningtype][0]
         if startline <= 0:
@@ -45,7 +42,6 @@ class Warning:
         """
         return lines
 
-
 class GnuWarning(Warning):
     """Class to describe detection and extraction of a message
     warning from the GNU compiler"""
@@ -59,18 +55,15 @@ class GnuWarning(Warning):
         #Dictionary of line offsets as these may vary depending on the warning type
         self.offsetdict = {'default': (-4,1)}
     
-    def getmessage(self,lines):
-        """Takes lines(list(str))
+    def getmessage(self,lines,sourcestr="/src"):
+        """Takes lines(list(str)) and optionally sourcestr
         Returns list(str)
-        
-        Could be embellished to curate the message further
-        """
 
-        #Basic checks- for this compiler we expect:
-        #-path to the source file in the first line
+        Performs some basic sanity checking on the output        
+        #-path fragment to the source file in the first line
         #-self.startstr in the last line
-
-        if lines[0].find("/src/") == -1:
+        """
+        if lines[0].find(sourcestr) == -1:
             print(lines)
             raise ValueError("Expecting first line of warning to contain /src/")
 
@@ -82,109 +75,29 @@ class GnuWarning(Warning):
 
 #Needs tuning
 class CCEWarning(Warning):
-    """Class to describe detection and extraction of a message
-    warning from the CCE compiler"""
-  
+    """Child of Warning for the CCE compiler"""
     def __init__(self):
         super().__init__()
-
-        #String to detect a warning
-        self.startstr = "warning:"
-
-        #Dictionary of line offsets as these may vary depending on the warning type
-        self.offsetdict = {'default': (1,1)}
-    
-    def getmessage(self,lines):
-        """Takes lines(list(str))
-        Returns list(str)
-        
-        Could be embellished to curate the message further
-        """
-
-        #Basic checks- for this compiler we expect:
-        #None yet implemented
-
-        return lines
 
 #Needs tuning
 class PGIWarning(Warning):
-    """Class to describe detection and extraction of a message
-    warning from the PGI compiler"""
-  
+    """Child of Warning for the PGI compiler"""
     def __init__(self):
         super().__init__()
-
-        #String to detect a warning
-        self.startstr = "warning:"
-
-        #Dictionary of line offsets as these may vary depending on the warning type
-        self.offsetdict = {'default': (1,1)}
-    
-    def getmessage(self,lines):
-        """Takes lines(list(str))
-        Returns list(str)
-        
-        Could be embellished to curate the message further
-        """
-
-        #Basic checks- for this compiler we expect:
-        #None yet implemented
-
-        return lines
 
 #Needs tuning
 class IntelWarning(Warning):
-    """Class to describe detection and extraction of a message
-    warning from the PGI compiler"""
-  
+    """Child of Warning for the Intel compiler"""
     def __init__(self):
         super().__init__()
-
-        #String to detect a warning
-        self.startstr = "warning:"
-
-        #Dictionary of line offsets as these may vary depending on the warning type
-        self.offsetdict = {'default': (1,1)}
-    
-    def getmessage(self,lines):
-        """Takes lines(list(str))
-        Returns list(str)
-        
-        Could be embellished to curate the message further
-        """
-
-        #Basic checks- for this compiler we expect:
-        #None yet implemented
-
-        return lines
 
 #Needs tuning
 class NAGWarning(Warning):
-    """Class to describe detection and extraction of a message
-    warning from the PGI compiler"""
-  
+    """Child of Warning for the NAG compiler"""
     def __init__(self):
         super().__init__()
 
-        #String to detect a warning
-        self.startstr = "warning:"
 
-        #Dictionary of line offsets as these may vary depending on the warning type
-        self.offsetdict = {'default': (1,1)}
-    
-    def getmessage(self,lines):
-        """Takes lines(list(str))
-        Returns list(str)
-        
-        Could be embellished to curate the message further
-        """
-
-        #Basic checks- for this compiler we expect:
-        #None yet implemented
-
-        return lines
-
-#Stolen from suite_report.py
 def _read_file(filename):
     """Takes filename (str)
     Return contents of a file, as list of strings."""
