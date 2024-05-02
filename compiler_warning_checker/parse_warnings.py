@@ -2,16 +2,16 @@
 
 import os
 
-class GnuWarning:
+class Warning:
     """Class to describe detection and extraction of a message
     warning from the GNU compiler"""
   
     def __init__(self):
         #String to detect a warning
-        self.startstr = "Warning:"
+        self.startstr = "warning:"
 
         #Dictionary of line offsets as these may vary depending on the warning type
-        self.offsetdict = {'default': (-4,1)}
+        self.offsetdict = {'Bar': (1,1)}
 
     def foundmessage(self,line):
         """Takes line(str) and returns True if a message is found"""
@@ -42,6 +42,26 @@ class GnuWarning:
     def getmessage(self,lines):
         """Takes lines(list(str))
         Returns list(str)
+        """
+        return lines
+
+
+class GnuWarning(Warning):
+    """Class to describe detection and extraction of a message
+    warning from the GNU compiler"""
+  
+    def __init__(self):
+        super().__init__()
+
+        #String to detect a warning
+        self.startstr = "Warning:"
+
+        #Dictionary of line offsets as these may vary depending on the warning type
+        self.offsetdict = {'default': (-4,1)}
+    
+    def getmessage(self,lines):
+        """Takes lines(list(str))
+        Returns list(str)
         
         Could be embellished to curate the message further
         """
@@ -60,6 +80,109 @@ class GnuWarning:
 
         return lines
 
+#Needs tuning
+class CCEWarning(Warning):
+    """Class to describe detection and extraction of a message
+    warning from the CCE compiler"""
+  
+    def __init__(self):
+        super().__init__()
+
+        #String to detect a warning
+        self.startstr = "warning:"
+
+        #Dictionary of line offsets as these may vary depending on the warning type
+        self.offsetdict = {'default': (1,1)}
+    
+    def getmessage(self,lines):
+        """Takes lines(list(str))
+        Returns list(str)
+        
+        Could be embellished to curate the message further
+        """
+
+        #Basic checks- for this compiler we expect:
+        #None yet implemented
+
+        return lines
+
+#Needs tuning
+class PGIWarning(Warning):
+    """Class to describe detection and extraction of a message
+    warning from the PGI compiler"""
+  
+    def __init__(self):
+        super().__init__()
+
+        #String to detect a warning
+        self.startstr = "warning:"
+
+        #Dictionary of line offsets as these may vary depending on the warning type
+        self.offsetdict = {'default': (1,1)}
+    
+    def getmessage(self,lines):
+        """Takes lines(list(str))
+        Returns list(str)
+        
+        Could be embellished to curate the message further
+        """
+
+        #Basic checks- for this compiler we expect:
+        #None yet implemented
+
+        return lines
+
+#Needs tuning
+class IntelWarning(Warning):
+    """Class to describe detection and extraction of a message
+    warning from the PGI compiler"""
+  
+    def __init__(self):
+        super().__init__()
+
+        #String to detect a warning
+        self.startstr = "warning:"
+
+        #Dictionary of line offsets as these may vary depending on the warning type
+        self.offsetdict = {'default': (1,1)}
+    
+    def getmessage(self,lines):
+        """Takes lines(list(str))
+        Returns list(str)
+        
+        Could be embellished to curate the message further
+        """
+
+        #Basic checks- for this compiler we expect:
+        #None yet implemented
+
+        return lines
+
+#Needs tuning
+class NAGWarning(Warning):
+    """Class to describe detection and extraction of a message
+    warning from the PGI compiler"""
+  
+    def __init__(self):
+        super().__init__()
+
+        #String to detect a warning
+        self.startstr = "warning:"
+
+        #Dictionary of line offsets as these may vary depending on the warning type
+        self.offsetdict = {'default': (1,1)}
+    
+    def getmessage(self,lines):
+        """Takes lines(list(str))
+        Returns list(str)
+        
+        Could be embellished to curate the message further
+        """
+
+        #Basic checks- for this compiler we expect:
+        #None yet implemented
+
+        return lines
 
 #Stolen from suite_report.py
 def _read_file(filename):
@@ -117,7 +240,7 @@ def main():
 
     #Search through for appropriate tasks
     for dir in os.listdir(cylc_run + "/" + run_name + "/" + "log/job/1/"):
-        if dir.find("fcm_make_") != -1 and not dir.find("install_ctldata") != -1:
+        if dir.find("fcm_make_") != -1 and not dir.find("install_ctldata") != -1 and not dir.find("fcm_make_drivers") != -1:
             task_name = dir
 
             print("======= Processing " + task_name + " =======" )
@@ -125,8 +248,17 @@ def main():
             filename = cylc_run + "/" + run_name + "/" + "log/job/1/" + task_name + "/01/fcm-make.log"
 
             #Work out which compiler we're working with
+            #Switching for different versions could be done here or in the classes
             if task_name.find("_gnu_") != -1:
                 searchparams = GnuWarning()
+            elif task_name.find("_cce_") != -1:
+                searchparams = CCEWarning()
+            elif task_name.find("_pgi_") != -1:
+                searchparams = PGIWarning()
+            elif task_name.find("_intel_") != -1 or task_name.find("_ifort_") != -1:
+                searchparams = IntelWarning()
+            elif task_name.find("_nag_") != -1:
+                searchparams = NAGWarning()
             else:
                 print(filename)
                 raise ValueError("Unable to determine compiler")
