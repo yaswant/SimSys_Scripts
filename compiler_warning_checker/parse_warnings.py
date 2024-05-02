@@ -119,6 +119,17 @@ class NAGWarning(Warning):
     def __init__(self):
         super().__init__()
 
+#Needs tuning
+class AOCCWarning(Warning):
+    """Child of Warning for the AOCC compiler"""
+    def __init__(self):
+        super().__init__()
+
+#Needs tuning
+class NVIDIAWarning(Warning):
+    """Child of Warning for the NVIDIA compiler"""
+    def __init__(self):
+        super().__init__()
 
 def _read_file(filename):
     """Takes filename (str)
@@ -178,7 +189,11 @@ def main():
 
     #Search through for appropriate tasks
     for dir in os.listdir(cylc_run + "/" + run_name + "/" + "log/job/1/"):
-        if dir.find("fcm_make_") != -1 and not dir.find("install_ctldata") != -1 and not dir.find("fcm_make_drivers") != -1:
+        if dir.find("fcm_make_") != -1 and not \
+           dir.find("install_ctldata") != -1 and not \
+           dir.find("_drivers") != -1 and not \
+           dir.find("_mirror_") != -1 and not \
+           dir.find("_extract_") != -1:
             task_name = dir
 
             print("======= Processing " + task_name + " =======" )
@@ -199,6 +214,10 @@ def main():
                 searchparams = IntelWarning()
             elif task_name.find("_nag_") != -1:
                 searchparams = NAGWarning()
+            elif task_name.find("_aocc_") != -1:
+                searchparams = AOCCWarning()
+            elif task_name.find("_nvidia_") != -1:
+                searchparams = NVIDIAWarning()
             else:
                 print(filename)
                 raise ValueError("Unable to determine compiler")
