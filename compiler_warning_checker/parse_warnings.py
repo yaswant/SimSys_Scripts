@@ -94,7 +94,7 @@ class GnuWarning(Warning):
         self.endstr = "Warning:"
 
         #Dictionary of line offsets as these may vary depending on the warning type
-        self.offsetdict = {'default': (0,10)}
+        self.offsetdict = {'default': (0,20)}
 
     def foundmessage(self,line):
         """Takes line(str) and returns True if a message is found"""
@@ -229,7 +229,7 @@ def main():
     # run_name = "vn13.5_scm_warnings/run4"
 
     cylc_run = "/home/h01/frzz/cylc-run"
-    run_name = "um_exz_heads_nightly_2024-05-16/run1"
+    run_name = "um_heads_nightly_2024-05-16/run1"
 
     #Search through for appropriate tasks
     for dir in os.listdir(cylc_run + "/" + run_name + "/" + "log/job/1/"):
