@@ -18,8 +18,7 @@ class Warning:
         if line.find(self.startstr) != -1:
             #Add special cases to ignore specific warnings common to many compilers
             if line.find("warning: missing terminating") != -1 or \
-               line.find("statically linked applications requires") != -1 or \
-               line.find(""):
+               line.find("statically linked applications requires") != -1:
                 return False
             else:
                 return True
@@ -83,7 +82,7 @@ class GnuWarning(Warning):
     
     GNU is different from other compilers with the warning format
 
-    Start of each warning has .F90:239:21: so a regex is needed
+    Start of each warning has .F90:239:21: Look for a .F90 and tailing colon
     End of each warning has Warning:
     """
   
@@ -91,19 +90,24 @@ class GnuWarning(Warning):
         super().__init__()
 
         #String to detect a warning
-        self.startstr = "Warning:"
+        self.startstr = ".F90:"
+        self.endstr = "warning:"
 
         #Dictionary of line offsets as these may vary depending on the warning type
-        self.offsetdict = {'default': (-4,1), 'rank_mismatch': (-6,1)}
+        self.offsetdict = {'default': (0,10)}
+
+    def foundmessage(self,line):
+        """Takes line(str) and returns True if a message is found"""
+        if line.find(self.startstr) != -1 and line[-2:-1] == ":":
+            return True
+        else:
+            return False
 
     def getoffsets(self,reflineno,line):
         """Takes reflineno(int) and line(str)
         Returns two integers
         """
         warningtype = "default"
-
-        if line.find("Rank mismatch between actual argument at") != -1:
-            warningtype = "rank_mismatch"
 
         startline = reflineno + self.offsetdict[warningtype][0]
         if startline <= 0:
@@ -123,17 +127,16 @@ class GnuWarning(Warning):
         #-path fragment to the source file in the first line
         #-self.startstr in the last line
         """
-        #Fudge for rank mismatch which can change the mnumber of lines printed
-        if lines[0].find(sourcestr) == -1 and lines[0].find("Rank mismatch between actual argument at") != -1:
-            # for line in lines:
-                # print(line)
+        
+        if lines[0].find(sourcestr) == -1:
             raise ValueError("Expecting first line of warning to contain /src/")
 
-        if lines[-1].find(self.startstr) == -1:
-            for line in lines:
-                print(line)
-            raise ValueError("Expecting line of warning to contain " + self.startstr)
-
+        iline = 0
+        for line in lines:
+            if line.find(self.endstr) != -1:
+                return lines[0:iline]
+            iline += 1
+ 
         return lines
 
 
@@ -191,7 +194,7 @@ def main():
     # run_name = "vn13.5_scm_warnings/run4"
 
     cylc_run = "/home/h01/frzz/cylc-run"
-    run_name = "um_exz_heads_all_2024-04-29/run1"
+    run_name = "um_exz_heads_nightly_2024-05-16/run1"
 
     #Search through for appropriate tasks
     for dir in os.listdir(cylc_run + "/" + run_name + "/" + "log/job/1/"):
