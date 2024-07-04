@@ -96,7 +96,6 @@ def check_file_compliance(filename, templates, regex_templates):
     with open(filename) as file:
         head = [next(file) for _ in range(100)]
         for line in head:
-            print(line)
             if "copyright" in line.lower():
                 return True
 
