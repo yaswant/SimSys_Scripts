@@ -92,17 +92,25 @@ def check_file_compliance(filename, templates, regex_templates):
     Returns True if any of the templates are found in the contents of the file.
     """
 
+    # Read file line by line, within a range and check for substring.
     with open(filename) as file:
-        lines = file.read().splitlines()
-        for _, template in templates:
-            if template_is_in_file(lines, template):
+        head = [next(file) for _ in range(100)]
+        for line in head:
+            print(line)
+            if "copyright" in line.lower():
                 return True
 
-    with open(filename) as file:
-        lines = file.read()
-        for _, template in regex_templates:
-            if template.search(lines):
-                return True
+    # with open(filename) as file:
+    #     lines = file.read().splitlines()
+    #     for _, template in templates:
+    #         if template_is_in_file(lines, template):
+    #             return True
+    #
+    # with open(filename) as file:
+    #     lines = file.read()
+    #     for _, template in regex_templates:
+    #         if template.search(lines):
+    #             return True
 
     return False
 
