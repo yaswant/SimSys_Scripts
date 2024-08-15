@@ -441,7 +441,6 @@ class Project:
         self["bdiff_files"] = self.get_altered_files_list(
             self["repo mirror"]
         )
-        print(f"{self['bdiff_files']=}")
 
     def get_revisions(self):
 
@@ -824,7 +823,6 @@ class JobSources:
         # Placeholder name...
         invalid = []
         for project, params in self.source_items():
-            print(f"Setup {project}")
             item = Project(project, params, self)
             if item.valid:
                 self.projects[project] = item
@@ -1218,36 +1216,6 @@ class SuiteReport(SuiteReportDebug):
             if find_last_changed_rev.match(line):
                 revision = find_last_changed_rev.sub(r"", line).rstrip()
         return url, revision, working_copy_changes
-
-    @staticmethod
-    def set_parent(fcm_exec, mirror_url):
-        """For given URL, on the internal mirror repository, use
-        'fcm branch-info' to try and ascertain the branch parent, if any.
-        Takes fcm_exec path and mirror_url as strings.
-        Returns parent URL or None"""
-
-        parent = None
-        stdout = ""
-        command = [fcm_exec, "branch-info", mirror_url]
-        _, stdout, _ = _run_command(command, ignore_fail=True)
-        find_branch_parent = re.compile(r"Branch Parent:\s*(.*)")
-        for line in stdout:
-            result = find_branch_parent.search(line)
-            if result:
-                parent = result.group(1).rstrip()
-        return parent
-
-    @staticmethod
-    def check_repository(fcm_exec, url):
-        """Checks whether a given repository is accessible or not.
-        Takes fcm_exec path and a url (either SRS or mirror) as strings.
-        Returns True if the repository exists, False otherwise."""
-        retcode = 0
-        command = [fcm_exec, "info", url]
-        retcode, _, _ = _run_command(command, ignore_fail=True)
-        if retcode == 0:
-            return True
-        return False
 
     @staticmethod
     def export_file(repo_url, fname, outname="~/temp.txt"):
@@ -1867,178 +1835,6 @@ class SuiteReport(SuiteReportDebug):
 
     # pylint: enable=too-many-arguments
 
-    @staticmethod
-    def convert_to_mirror(url, projects_dict):
-        """Take a URL as a string, and a dictionary of {project : url, ...}
-        If url is a shared repository URL in the projects dictionary convert
-        to an internal mirror URL if also available.
-        Otherwise return the original URL
-        Assumes mirror loc of proj with url svn:something/somewhere/project
-        is given as svn:something/somewhere/projectm
-        """
-        if url is None:
-            return None
-        mirror_url = url
-        for proj, proj_url in projects_dict.items():
-            # checking given url against urls in the projects_dict
-            if proj_url in url:
-                new_proj = proj + "m"
-                if new_proj in projects_dict:
-                    old_proj_url = proj_url
-                    new_proj_url = projects_dict[new_proj]
-                    mirror_url = re.sub(
-                        old_proj_url, new_proj_url, url, count=1
-                    )
-                    break
-            # checking given url against keywords in the projects_dict
-            elif proj in url:
-                new_proj = proj + "m"
-                if new_proj in projects_dict:
-                    mirror_url = re.sub(proj, new_proj, url, count=1)
-                    break
-        return mirror_url
-
-    @staticmethod
-    def convert_to_srs(url, projects_dict):
-        """Take a URL as a string, and a dictionary of {project : url, ...}
-        If url is a mirror repository URL in the projects dictionary convert
-        to an SRS URL if also availble.
-        Otherwise return the original URL
-        """
-        if url is None:
-            return None
-        srs_url = url
-        for proj, proj_url in projects_dict.items():
-            # Only check for keywords which correspond to mirror or SRS format
-            if re.search(r".x(|m)$", proj):
-                if re.search(proj_url, url):
-                    # checking given url against urls in the projects_dict
-                    shared_project = re.sub(r"m$", r"", proj)
-                    if shared_project in projects_dict:
-                        mirror_url = proj_url
-                        shared_url = projects_dict[shared_project]
-                        srs_url = re.sub(mirror_url, shared_url, url, count=1)
-                        break
-                elif re.search("fcm:" + proj + r"[^m]", url):
-                    # Looking for an fcm: shorthand notation based on keyword.
-                    shared_project = re.sub(r"m$", r"", proj)
-                    if shared_project in projects_dict:
-                        # if the fcm keyword ends in '_tr' it's on the trunk
-                        if re.match(r"fcm:" + proj + r"_tr", url):
-                            srs_url = re.sub(
-                                r"fcm:" + proj + r"_tr",
-                                projects_dict[shared_project] + r"/trunk",
-                                url,
-                                count=1,
-                            )
-                        # if the fcm keyword ends in '_br' it's from branches
-                        elif re.match(r"fcm:" + proj + r"_br", url):
-                            srs_url = re.sub(
-                                r"fcm:" + proj + r"_br",
-                                projects_dict[shared_project] + r"/branches",
-                                url,
-                                count=1,
-                            )
-                        # maintain keyword style, but convert to srs.
-                        else:
-                            srs_url = re.sub(proj, shared_project, url,
-                                             count=1)
-                        break
-        return srs_url
-
-    @staticmethod
-    def convert_to_keyword(url, projects):
-        """Takes url and project dictionary.
-        Convert a the URL to a keyword based version, if a keyword exists
-        in the project dictionary provied.
-        Returns None if no keyword is defined.
-        """
-        if url is None:
-            return None
-        keyword_url = None
-        for proj, proj_url in projects.items():
-            if proj_url in url:
-                old_proj_url = projects[proj]
-                new_proj_url = f"fcm:{proj}"
-                keyword_url = re.sub(old_proj_url, new_proj_url, url, count=1)
-                keyword_url = re.sub(r"/trunk", "_tr", keyword_url, count=1)
-                keyword_url = re.sub(r"/branches", "_br", keyword_url, count=1)
-                break
-            if "fcm:" + proj in url:
-                keyword_url = url
-                break
-        return keyword_url
-
-    def generate_link(self, url):
-        """Given a URL, see if it can be made into a shared repository link.
-        Returns a link as a str or None"""
-        link = None
-        if url is not None:
-            # Look for a matching part of the URL in the list of projects
-            for _, svn in self.projects.items():
-                if re.search(svn, url):
-                    link = _url_to_trac_link(url)
-                    break
-        return link
-
-    @staticmethod
-    def link_from_loc_layout(url, mirror_url, fcm_exec):
-        """Attempt to generate a link to a url using a bunch of assumptions
-        we know mostly hold due to working practices at the Met Office.
-        Takes url, mirror url and fcm exec path as strings.
-        Returns Link as string or None"""
-        link = None
-        if url is None or mirror_url is None or re.search(r"^file:/", url):
-            return None
-        _, stdout, _ = _run_command([fcm_exec, "loc-layout", mirror_url])
-        path = None
-        root = None
-        lproject = None
-        revision = None
-        find_path = re.compile(r"^path:\s*")
-        find_root = re.compile(r"^root:\s*")
-        find_project = re.compile(r"^project:\s*")
-        find_peg_rev = re.compile(r"^peg_rev:\s*")
-        for line in stdout:
-            if find_path.match(line):
-                path = find_path.sub(r"", line)
-                continue
-            if find_root.match(line):
-                root = find_root.sub(r"", line)
-                continue
-            if find_project.match(line):
-                lproject = find_project.sub(r"", line)
-                continue
-            if find_peg_rev.match(line):
-                revision = find_peg_rev.sub(r"", line)
-        if root is not None and lproject is not None and path is not None:
-            # Convert to a trac url.
-            if re.search(r"/svn/", url):
-                url = re.sub(r"svn", r"trac", url)
-                elements = url.split("/")
-                elements.insert(elements.index("trac") + 2, "browser")
-                url = "/".join(elements)
-                if revision is not None:
-                    link = url + f"?rev={revision}"
-                else:
-                    link = url
-        return link
-
-    @staticmethod
-    def revision_from_loc_layout(mirror_url, fcm_exec):
-        """Attempt to recover a revision number using a url to the mirror
-        repository. Also used to translate vn4.3 into 1234"""
-        if mirror_url is None:
-            return None
-        _, stdout, _ = _run_command([fcm_exec, "loc-layout", mirror_url])
-        revision = None
-        find_peg_rev = re.compile(r"^peg_rev:\s*")
-        for line in stdout:
-            if find_peg_rev.match(line):
-                revision = find_peg_rev.sub(r"", line)
-                break
-        return revision
-
     def generate_project_table(self):
         """Returns a trac-formatted table containing the project source
         trees used in this suite.
@@ -2195,73 +1991,6 @@ class SuiteReport(SuiteReportDebug):
             data[row[0]] = row[1]
         database.close()
         return data
-
-    @staticmethod
-    def ascertain_ticket_number(mirror_url, fcm_exec):
-        """Try and work out the ticket number from the Trac log.
-        Takes URL on local (mirror) repository and fcm_exec path.
-        Uses 'fcm log'
-        Relies on commit line starting with '#[0-9]+' - meto working
-        practices for commit says "start with ticket number"
-        Returns ticket number as string or None."""
-        ticket_number = None
-        if re.search("/trunk[/@$]", mirror_url) or re.search(
-            r"[fs][cv][mn]:\w+(.xm|.x|)_tr[/@$]", mirror_url
-        ):
-            return ticket_number
-        _, stdout, _ = _run_command([fcm_exec, "log", "-l", "1", mirror_url])
-        for line in stdout:
-            result = re.search(r"^\s*(#\d+)", line)
-            if result:
-                ticket_number = result.group(1)
-        return ticket_number
-
-    @staticmethod
-    def get_altered_files_list(mirror_loc):
-        """
-        Use the get_branch_diff_filenames function from fcm_bdiff to get a list
-        of files edited on a branch. Remove any entry that doesn't contain a
-        file extension as these are likely directories.
-        """
-
-        for attempt in range(5):
-            # pylint: disable=broad-exception-caught
-
-            try:
-                # Get a list of altered files from the fcm mirror url
-                bdiff_files = get_branch_diff_filenames(
-                    mirror_loc, path_override=""
-                )
-                break
-            except Exception as err:
-                print(err)
-                if attempt == 4:
-                    print(
-                        "Cant get list of alterered files - returning "
-                        "empty list."
-                    )
-                    bdiff_files = []
-                    break
-
-            # pylint: enable=broad-exception-caught
-
-        # If '.' is in the files list remove it
-        try:
-            bdiff_files.remove(".")
-        except ValueError:
-            pass
-
-        # Remove any item that is not a file - decide based on whether the item
-        # has a file extension
-        for item in bdiff_files:
-            # The last part of the file path
-            file_name = item.split("/")[-1]
-            # If the final part doesn't have a file extension remove this item
-            # as it is a directory
-            if "." not in file_name:
-                bdiff_files.remove(item)
-
-        return bdiff_files
 
     @staticmethod
     def generate_groups(grouplist):
