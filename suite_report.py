@@ -398,6 +398,58 @@ class SuiteReportDebug:
                 print(f'        {sub_key} is :"{sub_value}"')
 
 
+class JobSources:
+
+    """Container for information about all the job sources."""
+
+    def __init__(self):
+
+        self.job_sources = {}
+        self._primary_project = None
+        return
+
+    def __iadd__(self, extras):
+        
+        self.job_sources = _dict_merge(self.job_sources, extras)
+        return self
+
+    def __contains__(self, key):
+
+        return key in self.job_sources
+
+    def __getitem__(self, key):
+
+        return self.job_sources[key]
+
+    def __iter__(self):
+
+        yield from self.job_sources.items()
+
+    def remove(self, invalid):
+
+        for project in invalid:
+            del self.job_sources[project]
+        return
+
+    @property
+    def primary_project(self):
+
+        if self._primary_project is None:
+            # Set the first time the value is requested
+            if "LFRIC_APPS" in self.job_sources.keys():
+                self._primary_project = "LFRIC_APPS"
+            elif "UM" in self.job_sources.keys():
+                self._primary_project = "UM"
+            elif "JULES" in self.job_sources.keys():
+                self._primary_project = "JULES"
+            elif "UKCA" in self.job_sources.keys():
+                self._primary_project = "UKCA"
+            else:
+                self._primary_project = "UNKNOWN"
+
+        return self._primary_project
+
+
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-statements
@@ -435,7 +487,7 @@ class SuiteReport(SuiteReportDebug):
         self.site = "Unknown"
         self.rose_orig_host = None
         self.groups = []
-        self.job_sources = {}
+        self.job_sources = JobSources()
         self.primary_project = ""
         self.projects = {}
         self.status_counts = defaultdict(int)
@@ -462,27 +514,17 @@ class SuiteReport(SuiteReportDebug):
         self.initialise_projects()
         self.parse_processed_config_file()
         projects = self.check_versions_files()
-        self.job_sources = _dict_merge(self.job_sources, projects)
+        self.job_sources += projects
 
         # Work out which project this suite is run as - heirarchical structure
         # with lfric_apps at the top, then UM, then the rest
-        if "LFRIC_APPS" in self.job_sources.keys():
-            self.primary_project = "LFRIC_APPS"
-        elif "UM" in self.job_sources.keys():
-            self.primary_project = "UM"
-        elif "JULES" in self.job_sources.keys():
-            self.primary_project = "JULES"
-        elif "UKCA" in self.job_sources.keys():
-            self.primary_project = "UKCA"
-        else:
-            self.primary_project = "UNKNOWN"
+        self.primary_project = self.job_sources.primary_project
 
         self.groups = [_remove_quotes(group) for group in self.groups]
 
         fcm_exec = FCM[self.site]
         invalid = []
-        for project in self.job_sources:
-            proj_dict = self.job_sources[project]
+        for project, proj_dict in self.job_sources:
             proj_dict["tested source"] = _remove_quotes(
                 proj_dict["tested source"]
             )
@@ -577,8 +619,7 @@ class SuiteReport(SuiteReportDebug):
             )
 
         # Finally, remove any projects which were deemed invalid.
-        for project in invalid:
-            del self.job_sources[project]
+        self.job_sources.remove(invalid)
 
     def parse_processed_config_file(self):
         """Parse the suite.rc.processed file.
@@ -647,7 +688,7 @@ class SuiteReport(SuiteReportDebug):
                         ] = result.group(3)
 
         self.rose_orig_host = rose_orig_host
-        self.job_sources = sources
+        self.job_sources += sources
         self.multi_branches = multiple_branches
 
     def parse_rose_suite_run(self):
@@ -1255,8 +1296,8 @@ class SuiteReport(SuiteReportDebug):
 
         num_interactions = 0
 
-        for project in self.job_sources.keys():
-            for mod_file in self.job_sources[project]["bdiff_files"]:
+        for _, details in self.job_sources:
+            for mod_file in details["bdiff_files"]:
                 if "trunk" in mod_file:
                     mod_file = mod_file.split("trunk/")[-1]
                 # Check modified file isn't in extracted files list
@@ -1701,9 +1742,7 @@ class SuiteReport(SuiteReportDebug):
                 element = " || "
             return element
 
-        for project in sorted(self.job_sources):
-            proj_dict = self.job_sources[project]
-
+        for project, proj_dict in sorted(self.job_sources, key=lambda x: x[0]):
             line = f" || {project} || "
             line += gen_table_element([proj_dict["tested source"]], None)
             line += gen_table_element(
@@ -1918,7 +1957,7 @@ class SuiteReport(SuiteReportDebug):
 
             # Check to see if any of the soucres have associated tickets and
             # put links to them in the header if so.
-            for project, url_dict in self.job_sources.items():
+            for project, url_dict in self.job_sources:
                 try:
                     if url_dict["ticket no"] is not None:
                         ticket_nos += f"{project}:{url_dict['ticket no']} "
