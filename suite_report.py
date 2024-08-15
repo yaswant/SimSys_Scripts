@@ -444,6 +444,8 @@ class Project:
 
     def get_revisions(self):
 
+        """Get the revision of the project."""
+
         for location in ("repo", "parent"):
             url = self[location + " loc"]
             mirror_url = self[location + " mirror"]
@@ -457,6 +459,8 @@ class Project:
                 )
 
     def get_links(self):
+
+        """Get the repository links associated with the project."""
 
         # If those attempts to generate links didn't work, try the hope
         # and guess approach.
@@ -784,7 +788,6 @@ class JobSources:
         self.urls = {}
         self._primary_project = None
         self.projects = {}
-        return
 
     def __iadd__(self, extras):
 
@@ -814,7 +817,6 @@ class JobSources:
         """Add a URL dictionary to the instance."""
 
         self.urls = urls.copy()
-        return
 
     def setup(self):
 
@@ -832,8 +834,6 @@ class JobSources:
         # Remove invalid sources
         for project in invalid:
             del self.job_sources[project]
-
-        return
 
     @property
     def primary_project(self):
