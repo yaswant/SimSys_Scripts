@@ -344,13 +344,67 @@ def _parse_string(
     return value
 
 
+class SuiteReportDebug:
+
+    """Class containing debug components of SuiteReport."""
+
+    def debug_print_obj(self):
+        """Debug print method.
+        Prints everything in the SuiteReport object."""
+        print("-" * 80 + "\nSet up SuiteReport object\n"
+              + "-" * 80 + "\n\n")
+        for key, value in self.__dict__.items():
+            if key == "projects":
+                print(f'{key} contains "{len(value)}" entries.')
+            elif key == "sort_by_name":
+                print(f'{key} is :"{key == "sort_by_name"}"')
+            elif key == "only_common_groups":
+                print(f'{key} is :"{value}"')
+            elif key == "verbosity":
+                text = "Verbosity level is set to : "
+                if value >= 4:
+                    print(
+                        text
+                        + "Hide Housekeeping, Gatekeeping and Successful tasks"
+                    )
+                elif value >= 3:
+                    print(
+                        text
+                        + "Hide Housekeeping, Gatekeeping and if all "
+                        + "groups run were \"common\" groups also hide "
+                        + "Successful tasks"
+                    )
+                elif value >= 2:
+                    print(text + "Hide Housekeeping and Gatekeeping tasks")
+                elif value >= 1:
+                    print(text + "Hide Housekeeping tasks")
+                else:
+                    print(text + "Forcibly Print Everything.")
+            elif key == "job_sources":
+                self.print_job_sources(value)
+            else:
+                print(f'{key} is :"{value}"')
+        print(
+            "\n" + "-" * 80 + "\nEnd of SuiteReport object\n" + "-" * 80 + "\n"
+        )
+
+    @staticmethod
+    def print_job_sources(job_srcs_dict):
+        """Debug print method.
+        Prints everything in projects dictionary."""
+        for key, value in job_srcs_dict.items():
+            print(f"    {key} :")
+            for sub_key, sub_value in value.items():
+                print(f'        {sub_key} is :"{sub_value}"')
+
+
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-statements
 # pylint: disable=too-many-branches
-# pylint: disable=too-many-public-methods
+# pylintx: disable=too-many-public-methods
 
-class SuiteReport:
+class SuiteReport(SuiteReportDebug):
     """Object to hold data and methods required to produce a suite report
     from a rose-stem suite output."""
 
@@ -525,55 +579,6 @@ class SuiteReport:
         # Finally, remove any projects which were deemed invalid.
         for project in invalid:
             del self.job_sources[project]
-
-    def debug_print_obj(self):
-        """Debug print method.
-        Prints everything in the SuiteReport object."""
-        print("-" * 80 + "\nSet up SuiteReport object\n"
-              + "-" * 80 + "\n\n")
-        for key, value in self.__dict__.items():
-            if key == "projects":
-                print(f'{key} contains "{len(value)}" entries.')
-            elif key == "sort_by_name":
-                print(f'{key} is :"{key == "sort_by_name"}"')
-            elif key == "only_common_groups":
-                print(f'{key} is :"{value}"')
-            elif key == "verbosity":
-                text = "Verbosity level is set to : "
-                if value >= 4:
-                    print(
-                        text
-                        + "Hide Housekeeping, Gatekeeping and Successful tasks"
-                    )
-                elif value >= 3:
-                    print(
-                        text
-                        + "Hide Housekeeping, Gatekeeping and if all "
-                        + "groups run were \"common\" groups also hide "
-                        + "Successful tasks"
-                    )
-                elif value >= 2:
-                    print(text + "Hide Housekeeping and Gatekeeping tasks")
-                elif value >= 1:
-                    print(text + "Hide Housekeeping tasks")
-                else:
-                    print(text + "Forcibly Print Everything.")
-            elif key == "job_sources":
-                self.print_job_sources(value)
-            else:
-                print(f'{key} is :"{value}"')
-        print(
-            "\n" + "-" * 80 + "\nEnd of SuiteReport object\n" + "-" * 80 + "\n"
-        )
-
-    @staticmethod
-    def print_job_sources(job_srcs_dict):
-        """Debug print method.
-        Prints everything in projects dictionary."""
-        for key, value in job_srcs_dict.items():
-            print(f"    {key} :")
-            for sub_key, sub_value in value.items():
-                print(f'        {sub_key} is :"{sub_value}"')
 
     def parse_processed_config_file(self):
         """Parse the suite.rc.processed file.
