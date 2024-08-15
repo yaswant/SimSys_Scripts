@@ -441,6 +441,7 @@ class Project:
         self["bdiff_files"] = self.get_altered_files_list(
             self["repo mirror"]
         )
+        print(f"{self['bdiff_files']=}")
 
     def get_revisions(self):
 
@@ -499,7 +500,7 @@ class Project:
 
             return result
 
-        raise TypeError("unsupported comparison")            
+        raise TypeError("unsupported comparison")
 
     def __setitem__(self, key, value):
 
@@ -508,6 +509,10 @@ class Project:
     def __getitem__(self, key):
 
         return self.params[key]
+
+    def __contains__(self, key):
+
+        return key in self.params
 
     def set_parent(self, mirror_url):
         """For given URL, on the internal mirror repository, use
@@ -793,7 +798,7 @@ class JobSources:
 
     def __getitem__(self, key):
 
-        return self.job_sources[key]
+        return self.projects[key]
 
     def __iter__(self):
 
@@ -931,93 +936,6 @@ class SuiteReport(SuiteReportDebug):
 
         self.job_sources.setup()
 
-        invalid = []
-        for project, proj_dict in self.job_sources.source_items():
-            proj_dict["tested source"] = _remove_quotes(
-                proj_dict["tested source"]
-            )
-            if "repo loc" in proj_dict:
-                proj_dict["repo loc"] = self.convert_to_srs(
-                    proj_dict["repo loc"], self.projects
-                )
-            else:
-                proj_dict["repo loc"] = self.convert_to_srs(
-                    proj_dict["tested source"], self.projects
-                )
-
-            proj_dict["repo mirror"] = self.convert_to_mirror(
-                proj_dict["repo loc"], self.projects
-            )
-            # If the mirror doesn't exist, move on to the next project.
-            if not self.check_repository(fcm_exec, proj_dict["repo mirror"]):
-                invalid.append(project)
-                continue
-
-            proj_dict["parent mirror"] = self.set_parent(
-                fcm_exec, proj_dict["repo mirror"]
-            )
-
-            proj_dict["parent loc"] = self.convert_to_srs(
-                proj_dict["parent mirror"], self.projects
-            )
-            # Check "repo loc" and "parent loc" have revisions,
-            # and if not, try to get a head of 'trunk' one for them.
-            for location in ("repo", "parent"):
-                url = proj_dict[location + " loc"]
-                mirror_url = proj_dict[location + " mirror"]
-                if url is None or mirror_url is None:
-                    continue
-                if ":" in url and "@" not in url:
-                    revision = _get_current_head_revision(mirror_url, fcm_exec)
-                    proj_dict[location + " loc"] = url + "@" + revision
-                    proj_dict[location + " mirror"] = (
-                        mirror_url + "@" + revision
-                    )
-            proj_dict["repo link"] = self.generate_link(proj_dict["repo loc"])
-            proj_dict["parent link"] = self.generate_link(
-                proj_dict["parent loc"]
-            )
-            # If those attempts to generate links didn't work, try the hope
-            # and guess approach.
-            if proj_dict["repo link"] is None:
-                proj_dict["repo link"] = self.link_from_loc_layout(
-                    proj_dict["repo link"], proj_dict["repo mirror"], fcm_exec
-                )
-            if proj_dict["parent link"] is None:
-                proj_dict["parent link"] = self.link_from_loc_layout(
-                    proj_dict["parent loc"],
-                    proj_dict["parent mirror"],
-                    fcm_exec,
-                )
-            # Final attempt to ensure the links have revision numbers and not
-            # keywords which aren't evaluated in the browser.
-            if proj_dict["repo link"] is not None and re.search(
-                r"rev=[a-zA-z]", proj_dict["repo link"]
-            ):
-                revision = self.revision_from_loc_layout(
-                    proj_dict["repo mirror"], fcm_exec
-                )
-                proj_dict["repo link"] = re.sub(
-                    r"rev=[a-zA-z0-9.]+",
-                    "rev=" + revision,
-                    proj_dict["repo link"],
-                )
-            proj_dict["human repo loc"] = self.convert_to_keyword(
-                proj_dict["repo loc"], self.projects
-            )
-            proj_dict["human parent"] = self.convert_to_keyword(
-                proj_dict["parent loc"], self.projects
-            )
-            proj_dict["ticket no"] = self.ascertain_ticket_number(
-                proj_dict["repo mirror"], fcm_exec
-            )
-            proj_dict["bdiff_files"] = self.get_altered_files_list(
-                proj_dict["repo mirror"]
-            )
-
-            if self.job_sources.projects[project] == proj_dict:
-                print(f"{project}: YES")
-
         # Check to see if ALL the groups being run fall into the
         # "common groups" category. This is used to control automatic
         # hiding of successful tasks later.
@@ -1028,9 +946,6 @@ class SuiteReport(SuiteReportDebug):
                     group.strip() in COMMON_GROUPS[self.site]
                     for group in self.groups
             )
-
-        # Finally, remove any projects which were deemed invalid.
-        self.job_sources.remove(invalid)
 
     def parse_processed_config_file(self):
         """Parse the suite.rc.processed file.
@@ -2532,6 +2447,8 @@ class SuiteReport(SuiteReportDebug):
                 suite_dir = self.suite_path
             except Exception:
                 suite_dir = "--cylc_suite_dir--"
+
+            # FIXME: thie path is incorrect
             trac_log.extend(
                 [
                     "There has been an exception in "
