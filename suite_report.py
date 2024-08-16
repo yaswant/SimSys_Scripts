@@ -29,6 +29,7 @@
 # pylint: disable=too-many-lines
 
 import glob
+import io
 import os
 import re
 import sqlite3
@@ -857,13 +858,72 @@ class JobSources:
         return self._primary_project
 
 
+class TracFormatter:
+
+    """Format items for use with the Trac wiki."""
+
+    def gen_text_element(self, text_list, link, bold=False):
+        """Takes list of items (strings or Nones) in preference order.
+        Calls _select_preferred to get the first non None entry in list.
+        Optional Bool "bold" turns on Trac formatting of bold text.
+        Formats text as a Trac link if link is not None.
+        """
+        text = _select_preferred(text_list)
+        highlight = "'''" if bold else ""
+        if text is not None and link is not None:
+            element = f" {highlight}[{link} {text}]{highlight} || "
+        elif text is not None:
+            element = f" {highlight}{_escape_svn(text)}{highlight} || "
+        else:
+            element = ""
+        return element
+
+    def gen_trac_table(self, columns, title=None, output=sys.stdout):
+
+        """Create a formatted track table."""
+
+        if isinstance(columns, (str, int, float)):
+            # Ensure that columns are a sequence
+            columns = [columns]
+
+        column_count = len(columns)
+
+        if title:
+            # Add a title, if provided
+            print(f"'''{title}'''", file=output)
+
+        # Add the column headers
+        print("".join([f" || '''{i}'''" for i in columns]) + " ||", file=output)
+
+        while True:
+            # Add a row every time one is provided
+            row = yield
+            if not isinstance(row, (list, tuple)):
+                row = [row]
+            else:
+                row = list(row)
+
+            row_length = len(row)
+
+            if row_length > column_count:
+                # Complain if row is too long
+                raise IndexError(f"row is too long for table: {repr(row)}")
+
+            if row_length != column_count:
+                # Pad the row to match the number of columns
+                row += [""] * (column_count - row_length)
+
+            # Add the row, replacing None values with empty strings
+            print("".join([f" || {i or ''}" for i in row]) + " ||",
+                  file=output)
+
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-statements
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-public-methods
 
-class SuiteReport(SuiteReportDebug):
+class SuiteReport(SuiteReportDebug, TracFormatter):
     """Object to hold data and methods required to produce a suite report
     from a rose-stem suite output."""
 
@@ -1314,6 +1374,7 @@ class SuiteReport(SuiteReportDebug):
                                 {section.lower(): [owners, others]}
                             )
         except EnvironmentError:
+            # FIXME: this doesn't seem like the right sort of exception!
             print("Can't find working copy for Owners File")
             return None
 
@@ -1328,38 +1389,41 @@ class SuiteReport(SuiteReportDebug):
                       which type of table is being created
         """
 
-        table = ["'''Required " + mode.capitalize() + " Owner Approvals'''"]
+        result = io.StringIO()
 
         if mode == "config":
-            table += [" || '''Owner''' || '''Approval''' || '''Configs''' || "]
+            columns = ["Owner", "Approval", "Configs"]
         else:
-            table += [
-                " || '''Owner (Deputy)''' || '''Approval''' || "
-                + "'''Code Section''' || "
-            ]
+            columns = ["Owner (Deputy)", "Approval", "Code Section"]
+
+        table = self.gen_trac_table(
+            columns=columns,
+            title="Required " + mode.capitalize() + " Owner Approvals",
+            output=result)
+
+        # Initialise the table
+        table.send(None)
 
         if needed_approvals is None:
-            table += [
-                " |||||| No UM "
-                + mode.capitalize()
-                + " Owner Approvals Required || "
-            ]
+            # No approvals needed
+            table.send([None, None, f"No UM {mode.capitalize()} Owner Approvals Required"])
+
         else:
             for owner in needed_approvals.keys():
-                row = " || " + owner + " || Pending || "
-                count = 0
-                for val in needed_approvals[owner]:
-                    if count == 3:
-                        row += "[[br]]"
-                        count = 0
-                    row += "{{{" + val + "}}} "
-                    count += 1
-                row += " || "
-                table.append(row)
+                # Add the approvals for each owner, maximum of three per line
+                approvals = ""
+                for i, what in enumerate(needed_approvals[owner]):
+                    if i != 0 and i % 3 == 0:
+                        approvals += "[[br]]"
+                    approvals += "{{{" + what + "}}} "
 
-        table.append("")
+                table.send([owner, "Pending", approvals])
 
-        return table
+        # Always add a trailing newline
+        result.write("\n")
+
+        # FIXME: temporary conversion back to a list
+        return result.getvalue().split("\n")
 
     def get_config_owners(self, failed_configs, config_owners):
         """
@@ -1426,6 +1490,71 @@ class SuiteReport(SuiteReportDebug):
 
         return approval_table
 
+    @staticmethod
+    def lookup_ownership_section(fle):
+
+        """Simple lookup table of ownerships."""
+
+        section = ""
+
+        if fle.startswith("fcm-make"):
+            section = "fcm-make_um"
+
+        elif fle.startswith("fab"):
+            section = "fab"
+
+        elif fle.startswith("rose-stem"):
+            if "umdp3_check" in fle:
+                section = "umdp3_checker"
+            elif "run_cppcheck" in fle:
+                section = "run_cppcheck"
+            elif "rose-stem/bin" in fle:
+                section = "rose_bin"
+            else:
+                section = "rose_stem"
+
+        elif fle.startswith("rose-meta"):
+            if "versions.py" in fle:
+                section = "upgrade_macros"
+            elif "rose-meta.conf" in fle:
+                section = "rose-meta.conf"
+            else:
+                section = "stash"
+
+        # Unidentified section
+        return section
+
+    def get_file_section_header(self, fpath):
+
+        """Get section ownership from a file header."""
+
+        # Find area of files in other directories
+        file_path = self.export_file("fcm:um.xm_tr", fpath)
+        if file_path is None:
+            return ""
+
+        section = ""
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as inp_file:
+                for line in inp_file:
+                    if "file belongs in" in line:
+                        section = line.strip("\n")
+                        break
+
+        except IOError:
+            pass
+
+        # Remove C-style comment characters, if any
+        section = section.replace("/*", "").replace("*/", "")
+
+        try:
+            section = section.split(":")[1].strip().lower()
+        except IndexError:
+            section = ""
+
+        return section
+
     def get_code_owners(self, code_owners):
         """
         Function to get required code owner approvals based on fcm_bdiff
@@ -1469,50 +1598,12 @@ class SuiteReport(SuiteReportDebug):
             if fle.startswith("bin"):
                 needed_approvals["!umsysteam@metoffice.gov.uk"].add("bin")
                 continue
-            if fle.startswith("fcm-make"):
-                section = "fcm-make_um"
-            elif fle.startswith("fab"):
-                section = "fab"
-            elif fle.startswith("rose-stem"):
-                if "umdp3_check" in fle:
-                    section = "umdp3_checker"
-                elif "run_cppcheck" in fle:
-                    section = "run_cppcheck"
-                elif "rose-stem/bin" in fle:
-                    section = "rose_bin"
-                else:
-                    section = "rose_stem"
-            elif fle.startswith("rose-meta"):
-                if "versions.py" in fle:
-                    section = "upgrade_macros"
-                elif "rose-meta.conf" in fle:
-                    section = "rose-meta.conf"
-                else:
-                    section = "stash"
-            else:
+
+            section = self.lookup_ownership_section(fle)
+
+            if section == "":
                 # Find area of files in other directories
-                file_path = self.export_file("fcm:um.xm_tr", fpath)
-                if file_path is None:
-                    file_path = ""
-
-                try:
-                    with open(file_path, "r", encoding="utf-8") as inp_file:
-                        for line in inp_file:
-                            if "file belongs in" in line:
-                                section = line.strip("\n")
-                                break
-                        else:
-                            section = ""
-                except EnvironmentError:
-                    section = ""
-
-                # Get code area name out
-                section = re.sub(r"/\*", "", section)
-                section = re.sub(r"\*/", "", section)
-                try:
-                    section = section.split(":")[1].strip().lower()
-                except IndexError:
-                    section = ""
+                section = self.get_file_section_header(fpath)
 
             # Compare area name to code owners list
             try:
@@ -1674,6 +1765,23 @@ class SuiteReport(SuiteReportDebug):
 
         return return_message
 
+    @staticmethod
+    def forced_status_sort(item_tuple):
+        """A key generating function for use by sorted.
+        item_tuple is a tuple of the ("key", "value") pair from a
+        dictionary.
+        If the 'key' is in the DESIRED_ORDER list then return the key's
+        index from that list, otherwise return the key.
+        This forces the items in the DESIRED order list to be listed
+        first, in the order they appear in the list, followed by all the
+        other keys.
+        caveat, it relies on numbers preceeding alphabetic characters
+        and all the status keys starting with a letter."""
+        key = item_tuple[0]
+        if key in DESIRED_ORDER:
+            return str(DESIRED_ORDER.index(key))
+        return key
+
     # pylint: disable=too-many-arguments
 
     def generate_task_table(
@@ -1706,22 +1814,6 @@ class SuiteReport(SuiteReportDebug):
             if sort_by_name:
                 return task_item
             return (task_item[1], task_item[0])
-
-        def forced_status_sort(item_tuple):
-            """A key generating function for use by sorted.
-            item_tuple is a tuple of the ("key", "value") pair from a
-            dictionary.
-            If the 'key' is in the DESIRED_ORDER list then return the key's
-            index from that list, otherwise return the key.
-            This forces the items in the DESIRED order list to be listed
-            first, in the order they appear in the list, followed by all the
-            other keys.
-            caveat, it relies on numbers preceeding alphabetic characters
-            and all the status keys starting with a letter."""
-            key = item_tuple[0]
-            if key in DESIRED_ORDER:
-                return str(DESIRED_ORDER.index(key))
-            return key
 
         hidden_counts = defaultdict(int)
         lines = [" || '''Task''' || '''State''' || "]
@@ -1784,7 +1876,7 @@ class SuiteReport(SuiteReportDebug):
         status_summary.append(" |||| '''All Tasks''' || ")
         status_summary.append(" || '''Status''' || '''No. of Tasks''' || ")
         for status, count in sorted(
-            status_counts.items(), key=forced_status_sort
+            status_counts.items(), key=self.forced_status_sort
         ):
             status_summary.append(
                 f" || {status} ||   {count} || "
