@@ -40,6 +40,7 @@ import json
 from argparse import ArgumentParser, ArgumentTypeError, \
     RawDescriptionHelpFormatter
 from collections import defaultdict
+from tempfile import TemporaryDirectory, mkstemp
 from fcm_bdiff import get_branch_diff_filenames
 
 try:
@@ -890,6 +891,13 @@ class SuiteReport(SuiteReportDebug):
         self.creation_time = time.strftime("%Y/%m/%d %X")
         self.uncommitted_changes = 0
 
+        # Create a managed temporary directory.  Don't use a with
+        # block because this needs to persist for the lifetime of the
+        # instance
+        # pylint: disable=consider-using-with
+        self.tmpdir = TemporaryDirectory()
+        # pylint: enable=consider-using-with
+
         self.site = "Unknown"
         self.rose_orig_host = None
         self.groups = []
@@ -1217,8 +1225,7 @@ class SuiteReport(SuiteReportDebug):
                 revision = find_last_changed_rev.sub(r"", line).rstrip()
         return url, revision, working_copy_changes
 
-    @staticmethod
-    def export_file(repo_url, fname, outname="~/temp.txt"):
+    def export_file(self, repo_url, fname, outname=None):
         """
         Runs an fcm export on a file and saves it as outname
         Attempts to check it out 5 times to account for any network glitches.
@@ -1228,6 +1235,11 @@ class SuiteReport(SuiteReportDebug):
                 fname: the path of the file in the repo
                 outname: the path to the output file. Default ~/temp.txt
         """
+
+        if outname is None:
+            # Default to a temporary file in a managed temp directory
+            _, outname = mkstemp(prefix="export.", suffix=".txt",
+                                 dir=self.tmpdir.name)
 
         fname = fname.lstrip("/")
         outname = os.path.expanduser(outname)
@@ -1242,17 +1254,6 @@ class SuiteReport(SuiteReportDebug):
                 print(error)
 
         return None
-
-    @staticmethod
-    def clean_tempfile(fname="~/temp.txt"):
-        """
-        Clean up a temp file exported
-        """
-
-        try:
-            os.remove(os.path.expanduser(fname))
-        except EnvironmentError:
-            pass
 
     def generate_owner_dictionary(self, mode):
         """
@@ -1273,8 +1274,7 @@ class SuiteReport(SuiteReportDebug):
             return None
 
         # Export the Owners file from the HOT
-        exported_file = "~/tmp_owners.txt"
-        file_path = self.export_file("fcm:um.xm_tr", fname, exported_file)
+        file_path = self.export_file("fcm:um.xm_tr", fname)
         if file_path is None:
             # Couldn't check out file - use working copy Owners file instead
             wc_path = get_working_copy_path(
@@ -1316,9 +1316,6 @@ class SuiteReport(SuiteReportDebug):
         except EnvironmentError:
             print("Can't find working copy for Owners File")
             return None
-
-        # Clean up the checked out copy of the owners file
-        self.clean_tempfile(exported_file)
 
         return owners_dict
 
@@ -1509,9 +1506,6 @@ class SuiteReport(SuiteReportDebug):
                 except EnvironmentError:
                     section = ""
 
-                # Clean up checked out file
-                self.clean_tempfile()
-
                 # Get code area name out
                 section = re.sub(r"/\*", "", section)
                 section = re.sub(r"\*/", "", section)
@@ -1651,11 +1645,9 @@ class SuiteReport(SuiteReportDebug):
         return_message.append("")
 
         # Export the extract list from the lfric trunk
-        exported_extract_file = "~/tmp_extract.txt"
         extract_list_path = self.export_file(
             "fcm:lfric_apps.xm_tr",
             "build/extract/extract.cfg",
-            exported_extract_file,
         )
 
         if extract_list_path:
@@ -1675,9 +1667,6 @@ class SuiteReport(SuiteReportDebug):
                 + "LFRic Apps testing may be required.[[br]]"
             ]
             return return_message + [""]
-
-        # Clean up the checked out copy of the extract list file
-        self.clean_tempfile(exported_extract_file)
 
         num_interactions = self.get_lfric_interactions(extract_list_dict)
 
