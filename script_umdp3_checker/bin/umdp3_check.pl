@@ -359,7 +359,7 @@ else {
         # If we are in suite mode, we need to generate the ls from the extracted
         # sources, not from FCM.
 
-        my @extracts = ( "", "um", "shumlib", "meta", "ukca" );
+        my @extracts = ( "", "um", "shumlib", "meta", "ukca", "jules", "casim" );
 
         my $ss_env = $ENV{SCRIPT_SOURCE};
         my $extracts_path = join( " $ss_env/", @extracts );
