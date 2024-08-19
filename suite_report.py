@@ -196,8 +196,10 @@ def _write_file(filename, lines, newline=False):
     Returns None"""
     retn = "\n" if newline else ""
     with open(filename, "w", encoding="utf-8") as filehandle:
-        for line in lines:
-            filehandle.write(f"{line}{retn}")
+        if isinstance(lines, list):
+            filehandle.write(retn.join(lines) + retn)
+        elif isinstance(lines, io.StringIO):
+            filehandle.write(lines.getvalue() + retn)
 
 
 def _run_command(command, ignore_fail=False):
@@ -491,6 +493,12 @@ class Project:
                     "rev=" + revision,
                     self["repo link"],
                 )
+
+    def get(self, key, default=None):
+
+        """Emulate a proper dictionary."""
+
+        return self.params.get(key, default)
 
     def __eq__(self, other):
 
@@ -862,7 +870,26 @@ class TracFormatter:
 
     """Format items for use with the Trac wiki."""
 
-    def gen_text_element(self, text_list, link, bold=False):
+    @staticmethod
+    def gen_trac_header(title=None, output=sys.stdout):
+
+        """Create a tabulated report header."""
+
+        if title is not None:
+            print(f" = {title} = \n", file=output)
+
+        while True:
+            row = yield
+
+            if row is None or len(row) != 2 or not row[1]:
+                # Do nothing if value is not set
+                continue
+
+            # Print to the output stream
+            print(f" || {row[0]}: || {row[1]} || ", file=output)
+
+    @staticmethod
+    def gen_text_element(text_list, link, bold=False):
         """Takes list of items (strings or Nones) in preference order.
         Calls _select_preferred to get the first non None entry in list.
         Optional Bool "bold" turns on Trac formatting of bold text.
@@ -871,14 +898,15 @@ class TracFormatter:
         text = _select_preferred(text_list)
         highlight = "'''" if bold else ""
         if text is not None and link is not None:
-            element = f" {highlight}[{link} {text}]{highlight} || "
+            element = f" {highlight}[{link} {text}]{highlight} "
         elif text is not None:
-            element = f" {highlight}{_escape_svn(text)}{highlight} || "
+            element = f" {highlight}{_escape_svn(text)}{highlight} "
         else:
             element = ""
         return element
 
-    def gen_trac_table(self, columns, title=None, output=sys.stdout):
+    @staticmethod
+    def gen_trac_table(columns, title=None, output=sys.stdout):
 
         """Create a formatted track table."""
 
@@ -914,13 +942,14 @@ class TracFormatter:
                 row += [""] * (column_count - row_length)
 
             # Add the row, replacing None values with empty strings
-            print("".join([f" || {i or ''}" for i in row]) + " ||",
+            print("".join([f" || {'' if i is None else i}" for i in row]) + " ||",
                   file=output)
+
 
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=too-many-locals
-# pylint: disable=too-many-statements
-# pylint: disable=too-many-branches
+# pylintx: disable=too-many-statements
+# pylintx: disable=too-many-branches
 # pylint: disable=too-many-public-methods
 
 class SuiteReport(SuiteReportDebug, TracFormatter):
@@ -1723,7 +1752,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         message.append("")
         return message
 
-    def check_lfric_extract_list(self):
+    def check_lfric_extract_list(self, output=sys.stdout):
         """
         Determine whether any files modified in source branches are
         extracted by lfric.
@@ -1732,8 +1761,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         is required
         """
 
-        return_message = ["'''LFRic Testing Requirements'''"]
-        return_message.append("")
+        print("'''LFRic Testing Requirements'''\n", file=output)
 
         # Export the extract list from the lfric trunk
         extract_list_path = self.export_file(
@@ -1753,17 +1781,34 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         # If the path returned is None, the extract list failed, most likely as
         # the user doesn't have lfric access. In this case return a warning.
         if extract_list_path is None:
-            return_message += [
-                "Unable to export the lfric Apps extract_list. "
-                + "LFRic Apps testing may be required.[[br]]"
-            ]
-            return return_message + [""]
+            print("Unable to export the lfric Apps extract_list. "
+                  + "LFRic Apps testing may be required.[[br]]\n",
+                  file=output)
+            return
 
         num_interactions = self.get_lfric_interactions(extract_list_dict)
 
-        return_message += self.write_lfric_testing_message(num_interactions)
+        print("\n".join(self.write_lfric_testing_message(num_interactions)),
+              file=output)
 
-        return return_message
+    def gen_code_and_config_table(self, failed_configs, output=sys.stdout):
+
+        """Generate config/code owners table for the UM."""
+
+        # Generate table for required config and code owners
+        # Only run if a UM suite
+        return_list = []
+
+        co_approval_table = self.required_co_approvals()
+        if co_approval_table:
+            return_list += co_approval_table
+        config_approval_table = self.required_config_approvals(
+            failed_configs
+        )
+        if config_approval_table:
+            return_list += config_approval_table
+
+        print("\n".join(return_list), file=output)
 
     @staticmethod
     def forced_status_sort(item_tuple):
@@ -1782,16 +1827,16 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
             return str(DESIRED_ORDER.index(key))
         return key
 
-    # pylint: disable=too-many-arguments
+    def key_by_name_or_status(self, task_item):
+        """A key generating function for use by sorted.
+        task_item is a tuple of (name, status).
+        If sorting by name, return a tuple of (name, status),
+        otherwise return (status, name) for use as the sorting key"""
+        if self.sort_by_name:
+            return task_item
+        return (task_item[1], task_item[0])
 
-    def generate_task_table(
-        self,
-        data,
-        common_groups=False,
-        verbosity=DEFAULT_VERBOSITY,
-        sort_by_name=False,
-        status_counts=None,
-    ):
+    def generate_task_table(self, data, output=sys.stdout):
         """Returns a trac-formatted table of the tasks run in this suite.
         Tasks are provided in a dictionary of format {"task" : "status",...}
         verbosity (int) sets verbosity level. In practice, as the number
@@ -1804,32 +1849,29 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         if not empty and indicates how many tasks of the relevant types have
         been hidden"""
 
-        status_counts = status_counts or defaultdict(int)
-
-        def key_by_name_or_status(task_item):
-            """A key generating function for use by sorted.
-            task_item is a tuple of (name, status).
-            If sorting by name, return a tuple of (name, status),
-            otherwise return (status, name) for use as the sorting key"""
-            if sort_by_name:
-                return task_item
-            return (task_item[1], task_item[0])
-
         hidden_counts = defaultdict(int)
-        lines = [" || '''Task''' || '''State''' || "]
+
+        # Write the task table to a different buffer and add it to the
+        # output buffer after the summary table.
+        task_table = io.StringIO()
+        table = self.gen_trac_table(["Task", "State"], output=task_table)
+        table.send(None)
+
+        hidden = True
+
         find_housekeep = re.compile(r"housekeep")
         find_monitor = re.compile(r"monitor")
         find_gatekeeper = re.compile(r"gatekeeper")
         failed_configs = []
         for task, state in sorted(
-            list(data.items()), key=key_by_name_or_status
+            list(data.items()), key=self.key_by_name_or_status
         ):
             # Count the number of times task have any given status.
-            status_counts[state] += 1
-            if (verbosity >= 1) and find_housekeep.match(task):
+            self.status_counts[state] += 1
+            if (self.verbosity >= 1) and find_housekeep.match(task):
                 hidden_counts["''Housekeeping''"] += 1
                 continue
-            if (verbosity >= 2) and find_gatekeeper.match(task):
+            if (self.verbosity >= 2) and find_gatekeeper.match(task):
                 hidden_counts["''Gatekeeping''"] += 1
                 continue
             if find_monitor.match(task):
@@ -1843,7 +1885,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                 # "common groups"
                 highlight_start = ""
                 highlight_end = ""
-                if (verbosity >= 4) or (verbosity >= 3 and common_groups):
+                if (self.verbosity >= 4) or (self.verbosity >= 3 and self.only_common_groups):
                     hidden_counts["'''Succeeded'''"] += 1
                     continue
             elif "rose_ana" in task and "failed" in state:
@@ -1854,118 +1896,83 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                             "'''[[span(style=color: #FF00FF, *****"
                         )
                         highlight_end = "***** )]]'''"
-                        status_counts[PINK_FAIL_TEXT] += 1
-                        status_counts[state] -= 1
+                        self.status_counts[PINK_FAIL_TEXT] += 1
+                        self.status_counts[state] -= 1
                         break
                 else:
                     # Record this as a failed config
                     failed_configs.append(task)
 
-            lines.append(
-                f" || {task} || {highlight_start}{state}{highlight_end} || "
-            )
-        if len(lines) == 1:
-            lines.append(
-                " |||| This table is deliberately empty as all tasks "
-                "are hidden || "
-            )
+            table.send([task, f"{highlight_start}{state}{highlight_end}"])
+            hidden = False
 
-        status_summary = ["'''Suite Output'''"]
-        status_summary += self.gen_resources_table()
-        status_summary += [""]
-        status_summary.append(" |||| '''All Tasks''' || ")
-        status_summary.append(" || '''Status''' || '''No. of Tasks''' || ")
-        for status, count in sorted(
-            status_counts.items(), key=self.forced_status_sort
-        ):
-            status_summary.append(
-                f" || {status} ||   {count} || "
-            )
-        status_summary.append("")
-        if len(hidden_counts) > 0:
-            status_summary.append(" |||| '''Hidden Tasks''' || ")
-            status_summary.append(
-                " || '''Type''' || '''No. of Tasks Hidden''' || "
-            )
-            for task_type, count in hidden_counts.items():
-                status_summary.append(
-                    f" || {task_type} ||   {count} || "
-                )
-            status_summary.append("")
+        if hidden:
+            table.send([None,
+                        "This table is deliberately empty as all tasks "
+                        "are hidden"])
 
-        # Check whether lfric shared files have been touched
-        # Not needed if lfric the suite source
-        lfric_testing_message = [""]
-        if ("LFRIC" not in self.primary_project
-            and self.primary_project != "UNKNOWN"):
-            lfric_testing_message = self.check_lfric_extract_list()
-
-        # Generate table for required config and code owners
-        # Only run if a UM suite
-        return_list = []
         if self.primary_project.lower() == "um":
-            co_approval_table = self.required_co_approvals()
-            if co_approval_table:
-                return_list += co_approval_table
-            config_approval_table = self.required_config_approvals(
-                failed_configs
-            )
-            if config_approval_table:
-                return_list += config_approval_table
-        return lfric_testing_message + return_list + status_summary + lines
+            # Add the config owners table for the UM
+            self.gen_code_and_config_table(failed_configs, output=output)
 
-    # pylint: enable=too-many-arguments
+        print("'''Suite Output'''", file=output)
+        self.gen_resources_table(output)
 
-    def generate_project_table(self):
+        print("\n |||| '''All Tasks''' || ", file=output)
+
+        table = self.gen_trac_table(["Status", "No. of Tasks"], output=output)
+        table.send(None)
+        for status, count in sorted(
+            self.status_counts.items(), key=self.forced_status_sort
+        ):
+            table.send([status, count])
+        print("", file=output)
+
+        if len(hidden_counts) > 0:
+            print(" |||| '''Hidden Tasks''' || ", file=output)
+
+            table = self.gen_trac_table(["Type", "No. of Tasks Hidden"], output=output)
+            table.send(None)
+            for task_type, count in hidden_counts.items():
+                table.send([task_type, count])
+            print("", file=output)
+
+        # Finally, append the task table to the output buffer
+        print("", file=output)
+        print(task_table.getvalue(), file=output)
+
+    def generate_project_table(self, output=sys.stdout):
         """Returns a trac-formatted table containing the project source
         trees used in this suite.
         Method of SuiteReport object.
         Returns list of trac formatted table rows."""
 
-        lines = [
-            " || '''Project''' || '''Tested Source Tree''' || "
-            + "'''Repository Location''' || '''Branch Parent''' || "
-            + "'''Ticket number''' || '''Uncommitted Changes''' ||"
-        ]
-
-        def gen_table_element(text_list, link, bold=False):
-            """Takes list of items (strings or Nones) in preference order.
-            Calls _select_preferred to get the first non None entry in list.
-            Optional Bool "bold" turns on Trac formatting of bold text.
-            Formats text as a Trac link if link is not None.
-            Returns 'highlighted' text/link and "||" to form a single
-            element of a trac table."""
-            text = _select_preferred(text_list)
-            highlight = "'''" if bold else ""
-            if text is not None and link is not None:
-                element = f" {highlight}[{link} {text}]{highlight} || "
-            elif text is not None:
-                element = f" {highlight}{_escape_svn(text)}{highlight} || "
-            else:
-                element = " || "
-            return element
+        table = self.gen_trac_table(["Project", "Tested Source Tree",
+                                     "Repository Location", "Branch Parent",
+                                     "Ticket number", "Uncommitted Changes"],
+                                    output=output)
+        table.send(None)
 
         for project, proj_dict in sorted(self.job_sources, key=lambda x: x[0]):
-            line = f" || {project} || "
-            line += gen_table_element([proj_dict["tested source"]], None)
-            line += gen_table_element(
-                [proj_dict["human repo loc"], proj_dict["repo loc"]],
-                proj_dict["repo link"],
-            )
-            line += gen_table_element(
-                [proj_dict["human parent"], proj_dict["parent loc"]],
-                proj_dict["parent link"],
-            )
-            if "ticket no" in proj_dict:
-                if proj_dict["ticket no"] is not None:
-                    project_ticket_link = [
-                        f"{project}:{proj_dict['ticket no']}"
-                    ]
-                else:
-                    project_ticket_link = [None]
+            row = [project,
+                   self.gen_text_element([proj_dict["tested source"]], None),
+                   self.gen_text_element(
+                       [proj_dict["human repo loc"], proj_dict["repo loc"]],
+                       proj_dict["repo link"],
+                   ),
+                   self.gen_text_element(
+                       [proj_dict["human parent"], proj_dict["parent loc"]],
+                       proj_dict["parent link"],
+                   )]
+
+            if proj_dict.get("ticket no"):
+                project_ticket_link = [
+                    f"{project}:{proj_dict['ticket no']}"
+                ]
             else:
                 project_ticket_link = [None]
-            line += gen_table_element(project_ticket_link, None)
+            row.append(self.gen_text_element(project_ticket_link, None))
+
             wc_link = None
             wc_text = None
             if "working copy changes" in proj_dict:
@@ -1980,14 +1987,16 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                         proj_dict["version file"],
                     )
                     # pylint: enable=consider-using-f-string
-            line += gen_table_element([wc_text], wc_link, bold=True)
-            lines.append(line)
-        return lines
+            row.append(self.gen_text_element([wc_text], wc_link, bold=True))
+            table.send(row)
 
-    def gen_resources_table(self):
+    def gen_resources_table(self, output):
         """Loops over the RESOURCE_MONITORING_JOBS and returns a
         trac-formatted table of resources used by those jobs in this suite."""
-        lines = ["", "  No resource monitoring jobs run"]
+
+        print("", file=output)
+
+        table = None
         found_nothing = True
         for job in RESOURCE_MONITORING_JOBS[self.site]:
             filename = os.path.join(
@@ -1997,18 +2006,18 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                 wallclock, memory = self.get_wallclock_and_memory(filename)
                 if wallclock and memory:
                     if found_nothing:
-                        lines = [
-                            "",
-                            " |||| '''Resource Monitoring Task''' || ",
-                            " || '''Task''' || '''Wallclock''' || "
-                            + "'''Total Memory''' ||",
-                        ]
+                        table = self.gen_trac_table(["Resource Monitoring Task",
+                                                     "Task", "Wallclock",
+                                                     "Total Memory"],
+                                                    output=output)
+                        table.send(None)
                         found_nothing = False
-                    lines.append(
-                        f" || {job} || {wallclock} || {memory} || "
-                    )
-        lines.append("")
-        return lines
+                    table.send([job, wallclock, memory])
+
+        if found_nothing:
+            print("  No resource monitoring jobs run", file=output)
+
+        print("", file=output)
 
     @staticmethod
     def get_wallclock_and_memory(filename):
@@ -2082,152 +2091,147 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         output += _remove_quotes(grouplist[-1])
         return output
 
+    def get_project_tickets(self):
+
+        """Get all tickets associated with each project."""
+
+        ticket_nos = ""
+
+        # Check to see if any of the soucres have associated tickets and
+        # put links to them in the header if so.
+        for project, url_dict in self.job_sources:
+            if url_dict.get("ticket no") is not None:
+                ticket_nos += f"{project}:{url_dict['ticket no']} "
+
+        return ticket_nos
+
+    def report_uncommited_changes(self, trac_log):
+
+        """Repoort on any uncommitted changes."""
+
+        print("\n", file=trac_log)
+        print("-----", file=trac_log)
+        print(" = WARNING !!! = ", file=trac_log)
+        if self.uncommitted_changes > 1:
+            word = "changes"
+        else:
+            word = "change"
+            print(
+                "This rose-stem suite included "
+                + f"{self.uncommitted_changes} uncommitted"
+                + f" project {word} and is therefore "
+                + "'''not valid''' for review",
+                file=trac_log)
+            print("-----", file=trac_log)
+            print("", file=trac_log)
+
+        if (
+            not self.required_comparisons
+            and "LFRIC_APPS" not in self.job_sources
+        ):
+            print("", file=trac_log)
+            print("-----", file=trac_log)
+            print(" = WARNING !!! = ", file=trac_log)
+            print(
+                "This rose-stem suite did not run the "
+                + "required comparisons (COMPARE_OUTPUT "
+                + "and/or COMPARE_WALLCLOCK are not true) "
+                + "and is therefore '''not valid''' for "
+                + "review", file=trac_log
+            )
+            print("-----", file=trac_log)
+            print("", file=trac_log)
+
+    def report_multi_branches(self, trac_log):
+
+        """Report on the use of multiple branches."""
+
+        print("", file=trac_log)
+        print("-----", file=trac_log)
+        print(" = WARNING !!! = ", file=trac_log)
+
+        # pylint: disable=consider-using-f-string
+        print(
+            "This rose-stem suite included multiple "
+            + "branches in {len(self.multi_branches)} projects:",
+            file=trac_log
+        )
+        # pylint: enable=consider-using-f-string
+        print("", file=trac_log)
+
+        for project, branch_names in self.multi_branches.items():
+            print(f"'''{project}'''", file=trac_log)
+            for branch_name in "".join(branch_names).split():
+                print(f" * {branch_name}", file=trac_log)
+
+        print("", file=trac_log)
+        print("-----", file=trac_log)
+        print("", file=trac_log)
+
     def print_report(self):
         """'Prints a Trac formatted report of the suite_report object"""
 
+        trac_log = io.StringIO()
+
+        # pylint: disable=consider-using-f-string
+        print("{{{{{{#!div style='background : {0:s}'".format(
+            BACKGROUND_COLOURS[self.primary_project.lower()]),
+              file=trac_log)
+        # pylint: enable=consider-using-f-string
+
         # pylint: disable=broad-exception-caught
-
         try:
-            trac_log = []
-            ticket_nos = ""
+            ticket_nos = self.get_project_tickets()
 
-            # Check to see if any of the soucres have associated tickets and
-            # put links to them in the header if so.
-            for project, url_dict in self.job_sources:
-                try:
-                    if url_dict["ticket no"] is not None:
-                        ticket_nos += f"{project}:{url_dict['ticket no']} "
-                except KeyError:
-                    pass
-            trac_log.append(
-                # pylint: disable=consider-using-f-string
-                "{{{{{{#!div style='background : {0:s}'".format(
-                    BACKGROUND_COLOURS[self.primary_project.lower()]
-                )
-                # pylint: enable=consider-using-f-string
-            )
+            title = ""
             if ticket_nos != "":
-                trac_log.append(
-                    f" = Ticket {ticket_nos} "
-                    + "Testing Results - rose-stem output = "
-                )
-            else:
-                trac_log.append(" = Testing Results - rose-stem output = ")
-            trac_log.append("")
+                title = f"Ticket {ticket_nos} "
+            title += "Testing Results - rose-stem output"
 
-            trac_log.append(
-                f" || Suite Name: || {self.suitename} || "
-            )
+            header = self.gen_trac_header(title, trac_log)
+            header.send(None)
 
-            trac_log.append(
-                f" || Suite Owner: || {self.suite_owner} || "
-            )
-
-            if self.trustzone:
-                trac_log.append(
-                    f" || Trustzone: || {self.trustzone} || "
-                )
-
-            if self.fcm:
-                trac_log.append(
-                    f" || FCM version: || {self.fcm} || "
-                )
-
-            if self.rose:
-                trac_log.append(
-                    f" || Rose version: || {self.rose} || "
-                )
-
-            if self.cylc:
-                trac_log.append(
-                    f" || Cylc version: || {self.cylc} || "
-                )
-
-            trac_log.append(
-                f" || Report Generated: || {self.creation_time} || "
-            )
+            header.send(["Suite Name", self.suitename])
+            header.send(["Suite Owner", self.suite_owner])
+            header.send(["Trustzone", self.trustzone])
+            header.send(["FCM version", self.fcm])
+            header.send(["Rose version", self.rose])
+            header.send(["Cylc version", self.cylc])
+            header.send(["Report Generated", self.creation_time])
 
             # pylint: disable=consider-using-f-string
-            trac_log.append(
-                " || Cylc-Review: || {0:s}/{1:s}/{2:s}/?suite={3:s} || "
-                .format(
-                    CYLC_REVIEW_URL[self.site],
-                    "taskjobs",
-                    self.suite_owner,
-                    self.suitename,
-                )
-            )
+            header.send(["Cylc-Review",
+                         "{0:s}/{1:s}/{2:s}/?suite={3:s}"
+                         .format(
+                             CYLC_REVIEW_URL[self.site],
+                             "taskjobs",
+                             self.suite_owner,
+                             self.suitename)])
             # pylint: enable=consider-using-f-string
 
-            trac_log.append(f" || Site: || {self.site} || ")
-            trac_log.append(
-                f" || Groups Run: || {self.generate_groups(self.groups)} || "
-            )
-            if self.rose_orig_host is not None:
-                trac_log.append(
-                    f" || ''ROSE_ORIG_HOST:'' || {self.rose_orig_host} || "
-                )
-            if self.host_xcs:
-                trac_log.append(" || HOST_XCS || True || ")
-            trac_log.append("")
+            header.send(["Site", self.site])
+            header.send(["Groups Run", self.generate_groups(self.groups)])
+            header.send(["''ROSE_ORIG_HOST''", self.rose_orig_host])
+
+            # FIXME: check this
+            header.send(["HOST_XCS", self.host_xcs])
+            print("", file=trac_log)
 
             if self.uncommitted_changes:
-                trac_log.append("")
-                trac_log.append("-----")
-                trac_log.append(" = WARNING !!! = ")
-                if self.uncommitted_changes > 1:
-                    word = "changes"
-                else:
-                    word = "change"
-                trac_log.append(
-                    "This rose-stem suite included "
-                    + f"{self.uncommitted_changes} uncommitted"
-                    + f" project {word} and is therefore "
-                    + "'''not valid''' for review"
-                )
-                trac_log.append("-----")
-                trac_log.append("")
+                self.report_uncommited_changes(trac_log)
 
-            if (
-                not self.required_comparisons
-                and "LFRIC_APPS" not in self.job_sources
-            ):
-                trac_log.append("")
-                trac_log.append("-----")
-                trac_log.append(" = WARNING !!! = ")
-                trac_log.append(
-                    "This rose-stem suite did not run the "
-                    + "required comparisons (COMPARE_OUTPUT "
-                    + "and/or COMPARE_WALLCLOCK are not true) "
-                    + "and is therefore '''not valid''' for "
-                    + "review"
-                )
-                trac_log.append("-----")
-                trac_log.append("")
+            if self.multi_branches:
+                self.report_multi_branches(trac_log)
 
-            if len(self.multi_branches.keys()) > 0:
-                trac_log.append("")
-                trac_log.append("-----")
-                trac_log.append(" = WARNING !!! = ")
-                # pylint: disable=consider-using-f-string
-                trac_log.append(
-                    "This rose-stem suite included multiple "
-                    + "branches in {0:d} projects:".format(
-                        len(self.multi_branches.keys())
-                    )
-                )
-                # pylint: enable=consider-using-f-string
-                trac_log.append("")
-                for project, branch_names in self.multi_branches.items():
-                    trac_log.append(f"'''{project}'''")
-                    for branch_name in "".join(branch_names).split():
-                        trac_log.append(f" * {branch_name}")
-                trac_log.append("")
-                trac_log.append("-----")
-                trac_log.append("")
+            # FIXME: Change the method to print to the handle
+            self.generate_project_table(output=trac_log)
+            print("", file=trac_log)
 
-            trac_log.extend(self.generate_project_table())
-            trac_log.append("")
+            # Check whether lfric shared files have been touched
+            # Not needed if lfric the suite source
+            if ("LFRIC" not in self.primary_project
+                and self.primary_project != "UNKNOWN"):
+                self.check_lfric_extract_list(trac_log)
 
             db_file = ""
             if self.is_cylc8:
@@ -2238,35 +2242,30 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                 db_file = os.path.join(self.suite_path, SUITE_DB_FILENAME)
 
             data = self.query_database(db_file)
-            trac_log.extend(
-                self.generate_task_table(
-                    data,
-                    common_groups=self.only_common_groups,
-                    verbosity=self.verbosity,
-                    sort_by_name=self.sort_by_name,
-                    status_counts=self.status_counts,
-                )
-            )
-            trac_log.append("")
-            trac_log.append("}}}")
-            trac_log.append("")
 
-        except Exception as err:
+            # FIXME: Change the method to print to the handle
+            self.generate_task_table(data, output=trac_log)
+            print("", file=trac_log)
+            print("}}}", file=trac_log)
+            print("", file=trac_log)
+
+        # FIXME: fix the exception handling
+        #except Exception as err:
+        except IOError as err:
             print(err)
             try:
                 suite_dir = self.suite_path
             except Exception:
                 suite_dir = "--cylc_suite_dir--"
 
-            # FIXME: thie path is incorrect
-            trac_log.extend(
-                [
+            # FIXME: this path is incorrect
+            print(
                     "There has been an exception in "
                     + "SuiteReport.print_report()",
                     "See output for more information",
                     "rose-stem suite output will be in the files :\n",
                     f"~/cylc-run/{suite_dir}/log/suite/log",
-                ]
+                file=trac_log
             )
         finally:
             # Pick up user specified log path if available,
