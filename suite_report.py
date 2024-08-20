@@ -1350,12 +1350,9 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                 self.job_sources["UM"]["tested source"]
             )
             if not wc_path:
-                # FIXME: is this sensible?
                 wc_path = ""
             file_path = os.path.join(wc_path, fname)
             print(f"Using the checked out version of {fname} file")
-
-        # FIXME: check file exists at this point?
 
         return file_path
 
@@ -1412,9 +1409,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                             {section.lower(): [owners, others]}
                         )
         except IOError:
-            # FIXME: change the wording of this error message?
-            # FIXME: catch this error in get_current_code_owners?
-            print(f"Can't find working copy for {fname} File")
+            print(f"Can't find a valid copy of {fname} file")
             return None
 
         return owners_dict
@@ -2268,55 +2263,54 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         # FIXME: fix the exception handling
         #except Exception as err:
         except IOError as err:
+            # FIXME: generate and log a proper traceback
             print(err)
-            try:
-                suite_dir = self.suite_path
-            except Exception:
-                suite_dir = "--cylc_suite_dir--"
 
-            # FIXME: this path is incorrect
+            # FIXME: should be something like runN/log/scheduler/01-start-01.log for cylc87
             print(
                     "There has been an exception in "
                     + "SuiteReport.print_report()",
                     "See output for more information",
                     "rose-stem suite output will be in the files :\n",
-                    f"~/cylc-run/{suite_dir}/log/suite/log",
+                    f"{self.suite_path}/log/suite/log",
                 file=trac_log
             )
         finally:
             # Pick up user specified log path if available,
             # otherwise default to cyclc suite dir.
-            trac_log_path = "/No/Path/Provided"
-            if self.log_path:
-                trac_log_path = os.path.join(self.log_path, TRAC_LOG_FILE)
-            else:
-                trac_log_path = os.path.join(self.suite_path, TRAC_LOG_FILE)
-
-            # Attempt to provide user with some output,
-            # even in event of serious exceptions
-            try:
-                _write_file(trac_log_path, trac_log, newline=True)
-            except IOError:
-                print(
-                    f"[ERROR] Writing to {TRAC_LOG_FILE} file : {trac_log_path}"
-                )
-                print(
-                    f"{TRAC_LOG_FILE} to this point "
-                    + "would have read as follows :\n"
-                )
-                print(f"----- Start of {TRAC_LOG_FILE}.log -----")
-                for line in trac_log:
-                    print(line)
-                print(f"\n----- End of {TRAC_LOG_FILE}.log -----\n\n")
-
-                raise
+            self.write_final_report(trac_log)
 
         # pylint: disable=broad-exception-caught
 
+    def write_final_report(self, trac_log):
+
+        """Write the report to a file or to stdout."""
+
+        trac_log_path = os.path.join(self.log_path
+                                     if self.log_path else
+                                     self.suite_path,
+                                     TRAC_LOG_FILE)
+
+        # Attempt to provide user with some output,
+        # even in event of serious exceptions
+        try:
+            _write_file(trac_log_path, trac_log, newline=True)
+        except IOError:
+            print(
+                f"[ERROR] Writing to {TRAC_LOG_FILE} file : {trac_log_path}"
+            )
+            print(
+                f"{TRAC_LOG_FILE} to this point "
+                + "would have read as follows :\n"
+            )
+            print(f"----- Start of {TRAC_LOG_FILE} -----")
+            print(trac_log.getvalue())
+            print(f"\n----- End of {TRAC_LOG_FILE} -----\n\n")
+
+            raise
+
 # pylint: enable=too-many-instance-attributes
 # pylint: enable=too-many-locals
-# pylint: enable=too-many-statements
-# pylint: enable=too-many-branches
 # pylint: enable=too-many-public-methods
 
 # ==============================================================================
