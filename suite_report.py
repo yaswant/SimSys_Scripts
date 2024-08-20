@@ -2210,10 +2210,9 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         # FIXME: host_xcs produces the right value
         header.send(["HOST_XCS", self.host_xcs])
 
-    def print_report(self):
+    def print_report(self, trac_log):
         """'Prints a Trac formatted report of the suite_report object"""
 
-        trac_log = io.StringIO()
 
         # pylint: disable=consider-using-f-string
         print("{{{{{{#!div style='background : {0:s}'".format(
@@ -2221,66 +2220,42 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
               file=trac_log)
         # pylint: enable=consider-using-f-string
 
-        # pylint: disable=broad-exception-caught
-        try:
-            # Add the summary header
-            self.gen_report_header(trac_log)
-            print("", file=trac_log)
+        # Add the summary header
+        self.gen_report_header(trac_log)
+        print("", file=trac_log)
 
-            if self.uncommitted_changes:
-                self.report_uncommited_changes(trac_log)
+        if self.uncommitted_changes:
+            self.report_uncommited_changes(trac_log)
 
-            if self.multi_branches:
-                self.report_multi_branches(trac_log)
+        if self.multi_branches:
+            self.report_multi_branches(trac_log)
 
-            # FIXME: Change the method to print to the handle
-            self.generate_project_table(output=trac_log)
-            print("", file=trac_log)
+        # FIXME: Change the method to print to the handle
+        self.generate_project_table(output=trac_log)
+        print("", file=trac_log)
 
-            # Check whether lfric shared files have been touched
-            # Not needed if lfric the suite source
-            if ("LFRIC" not in self.primary_project
-                and self.primary_project != "UNKNOWN"):
-                self.check_lfric_extract_list(trac_log)
+        # Check whether lfric shared files have been touched
+        # Not needed if lfric the suite source
+        if ("LFRIC" not in self.primary_project
+            and self.primary_project != "UNKNOWN"):
+            self.check_lfric_extract_list(trac_log)
 
-            # FIXME: split out cylc8 checks
-            db_file = ""
-            if self.is_cylc8:
-                db_file = os.path.join(
-                    self.suite_path, "log", SUITE_DB_FILENAME_CYLC8
-                )
-            else:
-                db_file = os.path.join(self.suite_path, SUITE_DB_FILENAME)
-
-            data = self.query_database(db_file)
-
-            # FIXME: Change the method to print to the handle
-            self.generate_task_table(data, output=trac_log)
-            print("", file=trac_log)
-            print("}}}", file=trac_log)
-            print("", file=trac_log)
-
-        # FIXME: fix the exception handling
-        #except Exception as err:
-        except IOError as err:
-            # FIXME: generate and log a proper traceback
-            print(err)
-
-            # FIXME: should be something like runN/log/scheduler/01-start-01.log for cylc87
-            print(
-                    "There has been an exception in "
-                    + "SuiteReport.print_report()",
-                    "See output for more information",
-                    "rose-stem suite output will be in the files :\n",
-                    f"{self.suite_path}/log/suite/log",
-                file=trac_log
+        # FIXME: split out cylc8 checks
+        db_file = ""
+        if self.is_cylc8:
+            db_file = os.path.join(
+                self.suite_path, "log", SUITE_DB_FILENAME_CYLC8
             )
-        finally:
-            # Pick up user specified log path if available,
-            # otherwise default to cyclc suite dir.
-            self.write_final_report(trac_log)
+        else:
+            db_file = os.path.join(self.suite_path, SUITE_DB_FILENAME)
 
-        # pylint: disable=broad-exception-caught
+        data = self.query_database(db_file)
+
+        # FIXME: Change the method to print to the handle
+        self.generate_task_table(data, output=trac_log)
+        print("", file=trac_log)
+        print("}}}", file=trac_log)
+        print("", file=trac_log)
 
     def write_final_report(self, trac_log):
 
@@ -2434,14 +2409,45 @@ def main():
     Sets up a SuiteReport object and calls it's print_report method."""
     opts = parse_arguments()
 
-    suite_report_obj = SuiteReport(
-        suite_path=opts.suite_path,
-        log_path=opts.log_path,
-        verbosity=(opts.verbosity),
-        sort_by_name=opts.sort_by_name,
-    )
+    trac_log = io.StringIO()
 
-    suite_report_obj.print_report()
+    try:
+        # Handle all errors at the top of the script.  This ensures
+        # that all exceptions are handled and, where possible, added
+        # to the trac.log
+        suite_report = SuiteReport(
+            suite_path=opts.suite_path,
+            log_path=opts.log_path,
+            verbosity=(opts.verbosity),
+            sort_by_name=opts.sort_by_name,
+        )
+
+        suite_report.print_report(trac_log)
+
+    except Exception as err:
+        # Log the fact that an exception has occurred and that the
+        # details are in the cylc scheduler log.  If the exception
+        # is caught and reported here, the traceback lacks
+        # information about the caller
+
+        # FIXME: should be something like runN/log/scheduler/01-start-01.log for cylc87
+        print(
+            "There has been an exception in SuiteReport. ",
+            "See output for more information",
+            "rose-stem suite output will be in the files :\n",
+            f"{suite_report.suite_path}/log/suite/log\n",
+            file=trac_log
+        )
+
+        # Write traceback to the log
+        traceback.print_exception(err, file=trac_log)
+        raise
+
+    finally:
+        # Write the report to an appropriate output file, either
+        # the directory specified by the user or the cylc suite
+        # directory
+        suite_report.write_final_report(trac_log)
 
 
 if __name__ == "__main__":
