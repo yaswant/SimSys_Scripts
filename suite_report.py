@@ -2230,7 +2230,6 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         if self.multi_branches:
             self.report_multi_branches(trac_log)
 
-        # FIXME: Change the method to print to the handle
         self.generate_project_table(output=trac_log)
         print("", file=trac_log)
 
