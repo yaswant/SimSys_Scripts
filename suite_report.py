@@ -948,8 +948,6 @@ class TracFormatter:
 
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=too-many-locals
-# pylintx: disable=too-many-statements
-# pylintx: disable=too-many-branches
 # pylint: disable=too-many-public-methods
 
 class SuiteReport(SuiteReportDebug, TracFormatter):
@@ -1845,6 +1843,9 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
             return task_item
         return (task_item[1], task_item[0])
 
+    # pylint: disable=too-many-statements
+    # pylint: disable=too-many-branches
+
     def generate_task_table(self, data, output=sys.stdout):
         """Returns a trac-formatted table of the tasks run in this suite.
         Tasks are provided in a dictionary of format {"task" : "status",...}
@@ -1949,6 +1950,9 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         # Finally, append the task table to the output buffer
         print("", file=output)
         print(task_table.getvalue(), file=output)
+
+    # pylint: enable=too-many-statements
+    # pylint: enable=too-many-branches
 
     def generate_project_table(self, output=sys.stdout):
         """Returns a trac-formatted table containing the project source
