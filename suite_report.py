@@ -1869,22 +1869,19 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
 
         hidden = True
 
-        find_housekeep = re.compile(r"housekeep")
-        find_monitor = re.compile(r"monitor")
-        find_gatekeeper = re.compile(r"gatekeeper")
         failed_configs = []
         for task, state in sorted(
             list(data.items()), key=self.key_by_name_or_status
         ):
             # Count the number of times task have any given status.
             self.status_counts[state] += 1
-            if (self.verbosity >= 1) and find_housekeep.match(task):
+            if (self.verbosity >= 1) and task.startswith("housekeep"):
                 hidden_counts["''Housekeeping''"] += 1
                 continue
-            if (self.verbosity >= 2) and find_gatekeeper.match(task):
+            if (self.verbosity >= 2) and task.startswith("gatekeeper"):
                 hidden_counts["''Gatekeeping''"] += 1
                 continue
-            if find_monitor.match(task):
+            if task.startswith("monitor"):
                 hidden_counts["''Monitoring''"] += 1
                 continue
             highlight_start = "'''"
