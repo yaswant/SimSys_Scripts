@@ -1251,10 +1251,8 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
             )
 
         if vcs_data["url"] is not None:
-            if vcs_data["revision"] is not None:
-                ending = "@" + vcs_data["revision"]
-            else:
-                ending = ""
+            ending = "" if vcs_data["revision"] is None else \
+                     "@" + vcs_data["revision"]
             project = vcs_data["url"]
 
             prefix = "https://code.metoffice.gov.uk/svn/"
@@ -1270,10 +1268,8 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
             # This url isn't necessarily to top of the working copy so split
             # the url around "branches" or "trunk" to ensure the correct url
             url = vcs_data["url"]
-            if "branches" in url:
-                splitter = "branches"
-            else:
-                splitter = "trunk"
+            splitter = "branches" if "branches" in url else "trunk"
+
             start_url, end_url = url.split(f"/{splitter}/", 1)
             start_url += f"/{splitter}/"
             end_url = end_url.split("/")
@@ -1344,6 +1340,27 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
 
         return None
 
+    def get_current_code_owners(self, fname):
+
+        """Get the code/config owners file."""
+
+        # Export the Owners file from the HOT
+        file_path = self.export_file("fcm:um.xm_tr", fname)
+        if file_path is None:
+            # Couldn't check out file - use working copy Owners file instead
+            wc_path = get_working_copy_path(
+                self.job_sources["UM"]["tested source"]
+            )
+            if not wc_path:
+                # FIXME: is this sensible?
+                wc_path = ""
+            file_path = os.path.join(wc_path, fname)
+            print(f"Using the checked out version of {fname} file")
+
+        # FIXME: check file exists at this point?
+
+        return file_path
+
     def generate_owner_dictionary(self, mode):
         """
         Function that parses an owners file to create a dictionary of owners,
@@ -1362,17 +1379,8 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         else:
             return None
 
-        # Export the Owners file from the HOT
-        file_path = self.export_file("fcm:um.xm_tr", fname)
-        if file_path is None:
-            # Couldn't check out file - use working copy Owners file instead
-            wc_path = get_working_copy_path(
-                self.job_sources["UM"]["tested source"]
-            )
-            if not wc_path:
-                wc_path = ""
-            file_path = os.path.join(wc_path, fname)
-            print("Using the checked out version of Owners file")
+        # Get a current version of the owners file
+        file_path = self.get_current_code_owners(fname)
 
         # Read through file and generate dictionary
         try:
@@ -1383,28 +1391,32 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                     if "{{{" in line:
                         inside_listing = True
                         continue
+
                     if "}}}" in line:
                         inside_listing = False
                         continue
-                    if inside_listing:
-                        if line != "\n" and sep not in line:
-                            dummy_list = line.split()
-                            section = dummy_list[0].strip()
-                            owners = dummy_list[1].strip()
-                            if "umsysteam" in owners:
-                                owners = "!umsysteam@metoffice.gov.uk"
-                            try:
-                                others = dummy_list[2].replace("\n", "")
-                                if others == "--":
-                                    others = ""
-                            except IndexError:
+
+                    if (inside_listing
+                        and line != "\n"
+                        and sep not in line):
+                        dummy_list = line.split()
+                        section = dummy_list[0].strip()
+                        owners = dummy_list[1].strip()
+                        if "umsysteam" in owners:
+                            owners = "!umsysteam@metoffice.gov.uk"
+                        try:
+                            others = dummy_list[2].replace("\n", "")
+                            if others == "--":
                                 others = ""
-                            owners_dict.update(
-                                {section.lower(): [owners, others]}
-                            )
-        except EnvironmentError:
-            # FIXME: this doesn't seem like the right sort of exception!
-            print("Can't find working copy for Owners File")
+                        except IndexError:
+                            others = ""
+                        owners_dict.update(
+                            {section.lower(): [owners, others]}
+                        )
+        except IOError:
+            # FIXME: change the wording of this error message?
+            # FIXME: catch this error in get_current_code_owners?
+            print(f"Can't find working copy for {fname} File")
             return None
 
         return owners_dict
@@ -1478,10 +1490,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
             try:
                 config = parts[2]
             except IndexError:
-                if "mule" in job:
-                    config = "mule"
-                else:
-                    config = ""
+                config = "mule" if "mule" in job else ""
 
             # Get the config owner + others to notify
             try:
@@ -2150,13 +2159,11 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         print("-----", file=trac_log)
         print(" = WARNING !!! = ", file=trac_log)
 
-        # pylint: disable=consider-using-f-string
         print(
             "This rose-stem suite included multiple "
             + "branches in {len(self.multi_branches)} projects:",
             file=trac_log
         )
-        # pylint: enable=consider-using-f-string
         print("", file=trac_log)
 
         for project, branch_names in self.multi_branches.items():
@@ -2167,6 +2174,45 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         print("", file=trac_log)
         print("-----", file=trac_log)
         print("", file=trac_log)
+
+    def gen_report_header(self, output):
+
+        """Add a header summary table to the report."""
+
+        ticket_nos = self.get_project_tickets()
+
+        title = ""
+        if ticket_nos != "":
+            title = f"Ticket {ticket_nos} "
+        title += "Testing Results - rose-stem output"
+
+        header = self.gen_trac_header(title, output)
+        header.send(None)
+
+        header.send(["Suite Name", self.suitename])
+        header.send(["Suite Owner", self.suite_owner])
+        header.send(["Trustzone", self.trustzone])
+        header.send(["FCM version", self.fcm])
+        header.send(["Rose version", self.rose])
+        header.send(["Cylc version", self.cylc])
+        header.send(["Report Generated", self.creation_time])
+
+        # pylint: disable=consider-using-f-string
+        header.send(["Cylc-Review",
+                     "{0:s}/{1:s}/{2:s}/?suite={3:s}"
+                     .format(
+                         CYLC_REVIEW_URL[self.site],
+                         "taskjobs",
+                         self.suite_owner,
+                         self.suitename)])
+        # pylint: enable=consider-using-f-string
+
+        header.send(["Site", self.site])
+        header.send(["Groups Run", self.generate_groups(self.groups)])
+        header.send(["''ROSE_ORIG_HOST''", self.rose_orig_host])
+
+        # FIXME: host_xcs produces the right value
+        header.send(["HOST_XCS", self.host_xcs])
 
     def print_report(self):
         """'Prints a Trac formatted report of the suite_report object"""
@@ -2181,40 +2227,8 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
 
         # pylint: disable=broad-exception-caught
         try:
-            ticket_nos = self.get_project_tickets()
-
-            title = ""
-            if ticket_nos != "":
-                title = f"Ticket {ticket_nos} "
-            title += "Testing Results - rose-stem output"
-
-            header = self.gen_trac_header(title, trac_log)
-            header.send(None)
-
-            header.send(["Suite Name", self.suitename])
-            header.send(["Suite Owner", self.suite_owner])
-            header.send(["Trustzone", self.trustzone])
-            header.send(["FCM version", self.fcm])
-            header.send(["Rose version", self.rose])
-            header.send(["Cylc version", self.cylc])
-            header.send(["Report Generated", self.creation_time])
-
-            # pylint: disable=consider-using-f-string
-            header.send(["Cylc-Review",
-                         "{0:s}/{1:s}/{2:s}/?suite={3:s}"
-                         .format(
-                             CYLC_REVIEW_URL[self.site],
-                             "taskjobs",
-                             self.suite_owner,
-                             self.suitename)])
-            # pylint: enable=consider-using-f-string
-
-            header.send(["Site", self.site])
-            header.send(["Groups Run", self.generate_groups(self.groups)])
-            header.send(["''ROSE_ORIG_HOST''", self.rose_orig_host])
-
-            # FIXME: check this
-            header.send(["HOST_XCS", self.host_xcs])
+            # Add the summary header
+            self.gen_report_header(trac_log)
             print("", file=trac_log)
 
             if self.uncommitted_changes:
@@ -2233,6 +2247,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                 and self.primary_project != "UNKNOWN"):
                 self.check_lfric_extract_list(trac_log)
 
+            # FIXME: split out cylc8 checks
             db_file = ""
             if self.is_cylc8:
                 db_file = os.path.join(
