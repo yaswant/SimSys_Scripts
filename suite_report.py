@@ -51,13 +51,6 @@ except ModuleNotFoundError:
     COMPLETION = False
 
 
-CYLC_SUITE_ENV_FILE = "cylc-suite-env"
-PROCESSED_SUITE_RC = "suite.rc.processed"
-PROCESSED_FLOW_CYLC = "flow-processed.cylc"
-ROSE_SUITE_RUN_CONF = "rose-suite-run.conf"
-ROSE_SUITE_RUN_CONF_CYLC8 = "-rose-suite.conf"
-SUITE_DB_FILENAME = "cylc-suite.db"
-SUITE_DB_FILENAME_CYLC8 = "db"
 TRAC_LOG_FILE = "trac.log"
 DEFAULT_VERBOSITY = 3
 
@@ -174,6 +167,7 @@ COMMON_GROUPS = {
 }
 
 
+# FIXME: retire _read_file function
 def _read_file(filename):
     """Takes filename (str)
     Return contents of a file, as list of strings."""
@@ -344,6 +338,273 @@ def _parse_string(
                 value = re.sub(r"\]", r"", value)
                 value = value.split(",")
     return value
+
+
+class CylcVersion:
+    """Clas to abstract cylc configuration."""
+
+    PROCESSED_SUITE_RC_CYLC7 = "suite.rc.processed"
+    ROSE_SUITE_RUN_CONF_CYLC7 = "rose-suite-run.conf"
+    ROSE_SUITE_RUN_CONF_CYLC8 = "-rose-suite.conf"
+    SUITE_DB_FILENAME_CYLC7 = "cylc-suite.db"
+    SUITE_DB_FILENAME_CYLC8 = "db"
+
+    prefix_mosrs = "https://code.metoffice.gov.uk/svn/"
+    prefix_svn = "svn://fcm1/"
+
+    def __init__(self, cylc_path):
+
+        # Default to cylc 8
+        self.cylc_path = os.path.realpath(cylc_path)
+        self.cylc_log = os.path.join(self.cylc_path, "log")
+        self.cylc_config = os.path.join(self.cylc_log, "config")
+        self.version = 8
+
+        if not os.path.isdir(self.cylc_config):
+            self.version = 7
+            self.cylc_config = self.cylc_log
+
+        if not os.path.exists(self.cylc_config):
+            raise ValueError("Not a valid cylc run directory: " + repr(cylc_path))
+
+        # Separate the suite directory and try to get the current
+        # username
+        home, self.workflow_name = self.cylc_path.split("cylc-run/")
+        self.workflow_owner = os.environ.get(
+            "CYLC_SUITE_OWNER", os.path.basename(home.rstrip("/"))
+        )
+
+    @property
+    def suiterc_processed_path(self):
+        """Path to the processed suite file."""
+
+        if self.version == 7:
+            path = os.path.join(self.cylc_path, self.PROCESSED_SUITE_RC_CYLC7)
+
+        else:
+            path = None
+            for filename in os.listdir(self.cylc_config):
+                path = os.path.join(self.cylc_config, filename)
+                if os.path.isfile(path) and self.ROSE_SUITE_RUN_CONF_CYLC8 in filename:
+                    break
+
+        # Check file exist and force an exception if not
+        path = os.path.realpath(path)
+        os.stat(path)
+
+        return path
+
+    @property
+    def rose_suite_run_path(self):
+        """Path to the Rose suite run file."""
+
+        if self.version == 7:
+            path = os.path.join(self.cylc_log, self.ROSE_SUITE_RUN_CONF_CYLC7)
+
+        else:
+            glob_format = os.path.join(
+                self.cylc_config, f"*{self.ROSE_SUITE_RUN_CONF_CYLC8}"
+            )
+            path = glob.glob(glob_format)[0]
+
+        # Check file exist and force an exception if not
+        path = os.path.realpath(path)
+        os.stat(path)
+
+        return path
+
+    @property
+    def database_path(self):
+        """Database file."""
+
+        if self.version == 7:
+            path = os.path.join(self.cylc_path, self.SUITE_DB_FILENAME_CYLC7)
+
+        else:
+            path = os.path.join(self.cylc_log, self.SUITE_DB_FILENAME_CYLC8)
+
+        # Check file exist and force an exception if not
+        path = os.path.realpath(path)
+        os.stat(path)
+
+        return path
+
+    def _cylc7_project_details(self):
+        """Get cylc 7 project details.
+
+        Locate the .version files and parse them to obtain a
+        dictionary of projects and a count of uncommitted changes.
+        """
+
+        projects = {}
+        uncommitted_changes = 0
+
+        find_proj_name = re.compile(r"/(\w+)-\d+.version")
+        version_files = []
+        version_files = glob.glob(f"{self.cylc_path}/log/*.version")
+
+        for vfile in version_files:
+            if "rose-suite-run.version" in vfile:
+                continue
+            result = find_proj_name.search(vfile)
+            if result:
+                project = result.group(1).upper()
+                projects[project] = {}
+                url, revision, wc_changes = self._cylc7_parse_details(vfile)
+                projects[project]["last changed rev"] = revision
+                projects[project]["working copy changes"] = wc_changes
+                projects[project]["version file"] = os.path.basename(vfile)
+                if wc_changes:
+                    uncommitted_changes += 1
+                if url is not None:
+                    if revision is not None:
+                        ending = "@" + revision
+                    else:
+                        ending = ""
+                    projects[project]["repo loc"] = url + ending
+
+        return projects, uncommitted_changes
+
+    @staticmethod
+    def _cylc7_parse_details(vfile):
+        """Parse a cylc 7 version file.
+
+        Parse a versions file to extract the url and revision for the
+        branches behind any working copies, plus any uncommitted
+        changes.
+
+        Takes full path to a .version file.  Returns url and revision
+        as strings plus wc changes as boolean.
+        """
+
+        url = None
+        revision = None
+        working_copy_changes = False
+        find_svn_status = re.compile(r"SVN STATUS", re.IGNORECASE)
+        find_url = re.compile(r"URL:\s*")
+        find_last_changed_rev = re.compile(r"Last Changed Rev:\s*")
+
+        with open(vfile, encoding="utf-8") as source:
+            for line in source:
+                if find_svn_status.search(line):
+                    working_copy_changes = True
+                if find_url.match(line):
+                    url = find_url.sub(r"", line).rstrip()
+                if find_last_changed_rev.match(line):
+                    revision = find_last_changed_rev.sub(r"", line).rstrip()
+
+        return url, revision, working_copy_changes
+
+    def _cylc8_project_details(self):
+        """Get cylc 8 project details.
+
+        Parse the cylc vcs.json file to obtain a dictionary of
+        projects and a count of uncommitted changes.
+        """
+
+        projects = {}
+        uncommitted_changes = 0
+
+        vcs_path = os.path.join(self.cylc_log, "version", "vcs.json")
+        with open(vcs_path, encoding="utf-8") as vcs_file:
+            vcs_data = json.load(vcs_file)
+
+        if (
+            "url" not in vcs_data
+            or "revision" not in vcs_data
+            or "status" not in vcs_data
+        ):
+            # Allow the caller to hand the situation where one of the
+            # required keys cannot be found
+            raise KeyError(f"{vcs_file} lacks url, revision, or status")
+
+        if vcs_data["url"] is not None:
+            ending = "" if vcs_data["revision"] is None else "@" + vcs_data["revision"]
+            project = vcs_data["url"]
+
+            if project.startswith(self.prefix_mosrs):
+                project = project[len(self.prefix_mosrs) :]
+            if project.startswith(self.prefix_svn):
+                project = project[len(self.prefix_svn) :]
+            project = re.split("[/.]", project)[0].upper()
+            projects[project] = {}
+
+            # Use the version control url as the project source
+            # This url isn't necessarily to top of the working copy so split
+            # the url around "branches" or "trunk" to ensure the correct url
+            url = vcs_data["url"]
+            splitter = "branches" if "branches" in url else "trunk"
+
+            start_url, end_url = url.split(f"/{splitter}/", 1)
+            start_url += f"/{splitter}/"
+            end_url = end_url.split("/")
+            if splitter == "branches":
+                # For branches, format is
+                # "/[dev|test]/<username>/<branch-name>"
+                end_url = f"{end_url[0]}/{end_url[1]}/{end_url[2]}"
+            else:
+                # For trunk, format is just "/trunk/"
+                end_url = ""
+            projects[project]["repo loc"] = start_url + end_url + ending
+
+        for item in vcs_data["status"]:
+            if not item.startswith("?") and len(item) > 0:
+                uncommitted_changes += 1
+
+        return projects, uncommitted_changes
+
+    def project_details(self):
+        """Get project details.
+
+        Obtain a dictionary of projects and a count of uncommitted
+        changes.
+        """
+
+        if self.version == 7:
+            return self._cylc7_project_details()
+
+        return self._cylc8_project_details()
+
+    def task_states(self):
+        """Query the database and return a dictionary of states."""
+        database = sqlite3.connect(self.database_path)
+        cursor = database.cursor()
+        cursor.execute("select name, status from task_states;")
+        data = {}
+        for row in cursor:
+            data[row[0]] = row[1]
+        database.close()
+        return data
+
+    @classmethod
+    def default_cylc_path(cls):
+        """Default cylc directory path.
+
+        Use environment variables to guess at the path to the cylc
+        workflow directory.  If the path cannot be obtained from the
+        environment, return None.
+        """
+
+        # Try cylc 8 first
+        path = os.environ.get("CYLC_WORKFLOW_RUN_DIR")
+
+        if path is None:
+            # Next try cylc 7
+            path = os.environ.get("CYLC_SUITE_RUN_DIR")
+
+        # Return the path or None if environment is not set
+        return path
+
+    @property
+    def suite_scheduler_log_path(self):
+
+        """Path to the suite scheduler log."""
+
+        path = os.path.join(
+            self.cylc_log, "suite" if self.version == 7 else "scheduler", "log"
+        )
+
+        return os.path.realpath(path)
 
 
 class SuiteReportDebug:
@@ -968,9 +1229,8 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         status when generating the task table in the report.
         """
         self.suite_path = os.path.abspath(suite_path)
-        self.is_cylc8 = os.path.isdir(
-            os.path.join(self.suite_path, "log", "config")
-        )
+
+        self.cylc_version = CylcVersion(self.suite_path)
 
         self.log_path = log_path
         self.sort_by_name = sort_by_name
@@ -1014,8 +1274,8 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         self.parse_rose_suite_run()
         self.initialise_projects()
         self.parse_processed_config_file()
-        projects = self.check_versions_files()
-        self.job_sources += projects
+        details, self.uncommited_changes = self.cylc_version.project_details()
+        self.job_sources += details
         self.job_sources.add_urls(self.projects)
 
         # Work out which project this suite is run as - heirarchical structure
@@ -1049,27 +1309,9 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         Takes full path for suite dir.
         Sets class variables"""
 
-        suite_dir = self.suite_path
-
         rose_orig_host = "Unknown rose_orig_host"
 
-        srp_file = ""
-        if self.is_cylc8:
-            srp_file = os.path.join(suite_dir, "log", "config")
-            for filename in os.listdir(srp_file):
-                if (
-                    os.path.isfile(os.path.join(srp_file, filename))
-                    and ROSE_SUITE_RUN_CONF_CYLC8 in filename
-                ):
-                    srp_file = os.path.join(srp_file, filename)
-                    break
-            else:
-                sys.exit(
-                    "Error: Couldn't find a *-rose-suite.conf file in "
-                    + f"{srp_file}"
-                )
-        else:
-            srp_file = os.path.join(suite_dir, PROCESSED_SUITE_RC)
+        srp_file = self.cylc_version.suiterc_processed_path
 
         find_orig_host = re.compile(r"ROSE_ORIG_HOST\s*=\s*(.*)")
         # in pattern below, need to include "_REV" after the project name and
@@ -1115,15 +1357,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         Takes full path for suite dir.
         Sets class variables"""
 
-        suite_dir = self.suite_path
-        log_dir = os.path.join(suite_dir, "log")
-        rsr_file = ""
-        if self.is_cylc8:
-            glob_format = f"{log_dir}/config/*{ROSE_SUITE_RUN_CONF_CYLC8}"
-            rsr_file = glob.glob(glob_format)[0]
-        else:
-            rsr_file = os.path.join(log_dir, ROSE_SUITE_RUN_CONF)
-        lines = _read_file(rsr_file)
+        lines = _read_file(self.cylc_version.rose_suite_run_path)
         self.site = _parse_string("SITE", lines, default_unknown=True)
         self.groups = _parse_string(
             "RUN_NAMES", lines, split_on_comma=True, remove_quotes=False
@@ -1131,7 +1365,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         self.fcm = _parse_string("FCM_VERSION", lines)
         self.cylc = _parse_string("CYLC_VERSION", lines)
         if not self.cylc:
-            self.cylc = "8" if self.is_cylc8 is True else "7"
+            self.cylc = str(self.cylc_version.version)
         self.rose = _parse_string("ROSE_VERSION", lines)
 
         # This test is a little problematic when running this script
@@ -1187,126 +1421,6 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                 ):
                     projects[project] = url
         self.projects = projects
-
-    def cylc7_check_versions_file(self, projects):
-        """
-        cylc7 version of the check_versions_files function. Can be deleted once
-        cylc7 no longer supported.
-        """
-        find_proj_name = re.compile(r"/(\w+)-\d+.version")
-        version_files = []
-        version_files = glob.glob(
-            f"{self.suite_path}/log/*.version"
-        )
-
-        for vfile in version_files:
-            if "rose-suite-run.version" in vfile:
-                continue
-            result = find_proj_name.search(vfile)
-            if result:
-                project = result.group(1).upper()
-                projects[project] = {}
-                url, revision, wc_changes = self.parse_versions_file(vfile)
-                projects[project]["last changed rev"] = revision
-                projects[project]["working copy changes"] = wc_changes
-                projects[project]["version file"] = os.path.basename(vfile)
-                if wc_changes:
-                    self.uncommitted_changes += 1
-                if url is not None:
-                    if revision is not None:
-                        ending = "@" + revision
-                    else:
-                        ending = ""
-                    projects[project]["repo loc"] = url + ending
-
-        return projects
-
-    def check_versions_files(self):
-        """Locate the log/*.version files.
-        Call parse_versions_fileto parse the contents of each file.
-        Recover which projects are being augmented by branch or WC
-        Takes full path for suite dir.
-        Returns dictionary of project dictionares and number of projects
-        with uncommitted changes."""
-        projects = {}
-        self.uncommitted_changes = 0
-
-        if not self.is_cylc8:
-            return self.cylc7_check_versions_file(projects)
-
-        vcs_path = os.path.join(self.suite_path, "log", "version", "vcs.json")
-        with open(vcs_path, encoding="utf-8") as vcs_file:
-            vcs_data = json.load(vcs_file)
-
-        if (
-            "url" not in vcs_data
-            or "revision" not in vcs_data
-            or "status" not in vcs_data
-        ):
-            sys.exit(
-                f"The version control json file {vcs_file} did not have "
-                "entries for all of 'url', 'revision' and 'status'"
-            )
-
-        if vcs_data["url"] is not None:
-            ending = "" if vcs_data["revision"] is None else \
-                     "@" + vcs_data["revision"]
-            project = vcs_data["url"]
-
-            prefix = "https://code.metoffice.gov.uk/svn/"
-            prefix_svn = "svn://fcm1/"
-            if project.startswith(prefix):
-                project = project[len(prefix):]
-            if project.startswith(prefix_svn):
-                project = project[len(prefix_svn):]
-            project = re.split("[/.]", project)[0].upper()
-            projects[project] = {}
-
-            # Use the version control url as the project source
-            # This url isn't necessarily to top of the working copy so split
-            # the url around "branches" or "trunk" to ensure the correct url
-            url = vcs_data["url"]
-            splitter = "branches" if "branches" in url else "trunk"
-
-            start_url, end_url = url.split(f"/{splitter}/", 1)
-            start_url += f"/{splitter}/"
-            end_url = end_url.split("/")
-            if splitter == "branches":
-                # For branches, format is
-                # "/[dev|test]/<username>/<branch-name>"
-                end_url = f"{end_url[0]}/{end_url[1]}/{end_url[2]}"
-            else:
-                # For trunk, format is just "/trunk/"
-                end_url = ""
-            projects[project]["repo loc"] = start_url + end_url + ending
-
-        for item in vcs_data["status"]:
-            if not item.startswith("?") and len(item) > 0:
-                self.uncommitted_changes += 1
-
-        return projects
-
-    @staticmethod
-    def parse_versions_file(vfile):
-        """Parse a versions file to extract the url and revision for
-        the branches behind any working copies, plus any uncommitted
-        changes.
-        Takes full path to a .version file.
-        Returns url and revision as strings plus wc changes as boolean."""
-        url = None
-        revision = None
-        working_copy_changes = False
-        find_svn_status = re.compile(r"SVN STATUS", re.IGNORECASE)
-        find_url = re.compile(r"URL:\s*")
-        find_last_changed_rev = re.compile(r"Last Changed Rev:\s*")
-        for line in _read_file(vfile):
-            if find_svn_status.search(line):
-                working_copy_changes = True
-            if find_url.match(line):
-                url = find_url.sub(r"", line).rstrip()
-            if find_last_changed_rev.match(line):
-                revision = find_last_changed_rev.sub(r"", line).rstrip()
-        return url, revision, working_copy_changes
 
     def export_file(self, repo_url, fname, outname=None):
         """
@@ -2011,7 +2125,8 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                 wallclock, memory = self.get_wallclock_and_memory(filename)
                 if wallclock and memory:
                     if found_nothing:
-                        table = self.gen_trac_table(["Resource Monitoring Task",
+                        # FIXME: fix heading of resource monitoring task
+                        table = self.gen_trac_table([# "Resource Monitoring Task",
                                                      "Task", "Wallclock",
                                                      "Total Memory"],
                                                     output=output)
@@ -2239,16 +2354,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
             and self.primary_project != "UNKNOWN"):
             self.check_lfric_extract_list(trac_log)
 
-        # FIXME: split out cylc8 checks
-        db_file = ""
-        if self.is_cylc8:
-            db_file = os.path.join(
-                self.suite_path, "log", SUITE_DB_FILENAME_CYLC8
-            )
-        else:
-            db_file = os.path.join(self.suite_path, SUITE_DB_FILENAME)
-
-        data = self.query_database(db_file)
+        data = self.cylc_version.task_states()
 
         # FIXME: Change the method to print to the handle
         self.generate_task_table(data, output=trac_log)
@@ -2429,12 +2535,11 @@ def main():
         # is caught and reported here, the traceback lacks
         # information about the caller
 
-        # FIXME: should be something like runN/log/scheduler/01-start-01.log for cylc87
         print(
             "There has been an exception in SuiteReport. ",
             "See output for more information",
             "rose-stem suite output will be in the files :\n",
-            f"{suite_report.suite_path}/log/suite/log\n",
+            f"{suite_report.suite_scheduler_log_path}\n",
             file=trac_log
         )
 
