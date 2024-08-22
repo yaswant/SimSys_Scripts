@@ -1108,7 +1108,7 @@ class TracFormatter:
         return element
 
     @staticmethod
-    def gen_trac_table(columns, title=None, output=sys.stdout):
+    def gen_trac_table(columns, title=None, preamble=None, output=sys.stdout):
 
         """Create a formatted track table."""
 
@@ -1121,6 +1121,11 @@ class TracFormatter:
         if title:
             # Add a title, if provided
             print(f"'''{title}'''", file=output)
+
+        if preamble:
+            # Add something that isn't a set of column headers
+            print("".join([f" || '''{'' if i is None else i}'''" for i in preamble])
+                  + " ||", file=output)
 
         # Add the column headers
         print("".join([f" || '''{i}'''" for i in columns]) + " ||", file=output)
@@ -2098,10 +2103,9 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                 wallclock, memory = self.get_wallclock_and_memory(filename)
                 if wallclock and memory:
                     if found_nothing:
-                        # FIXME: fix heading of resource monitoring task
-                        table = self.gen_trac_table([# "Resource Monitoring Task",
-                                                     "Task", "Wallclock",
+                        table = self.gen_trac_table(["Task", "Wallclock",
                                                      "Total Memory"],
+                                                    preamble=[None, "Resource Monitoring Task"],
                                                     output=output)
                         table.send(None)
                         found_nothing = False
