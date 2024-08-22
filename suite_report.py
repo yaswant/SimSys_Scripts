@@ -28,7 +28,6 @@
 
 # pylint: disable=too-many-lines
 
-import glob
 import io
 import os
 import re
@@ -41,6 +40,7 @@ import json
 from argparse import ArgumentParser, ArgumentTypeError, \
     RawDescriptionHelpFormatter
 from collections import defaultdict
+from pathlib import Path
 from tempfile import TemporaryDirectory, mkstemp
 from fcm_bdiff import get_branch_diff_filenames
 
@@ -296,21 +296,21 @@ class CylcVersion:
     def __init__(self, cylc_path):
 
         # Default to cylc 8
-        self.cylc_path = os.path.realpath(cylc_path)
-        self.cylc_log = os.path.join(self.cylc_path, "log")
-        self.cylc_config = os.path.join(self.cylc_log, "config")
+        self.cylc_path = Path(cylc_path).resolve()
+        self.cylc_log = self.cylc_path / "log"
+        self.cylc_config = self.cylc_log / "config"
         self.version = 8
 
-        if not os.path.isdir(self.cylc_config):
+        if not self.cylc_config.is_dir():
             self.version = 7
             self.cylc_config = self.cylc_log
 
-        if not os.path.exists(self.cylc_config):
+        if not self.cylc_config.exists():
             raise ValueError("Not a valid cylc run directory: " + repr(cylc_path))
 
         # Separate the suite directory and try to get the current
         # username
-        home, self.workflow_name = self.cylc_path.split("cylc-run/")
+        home, self.workflow_name = str(self.cylc_path).split("cylc-run/")
         self.workflow_owner = os.environ.get(
             "CYLC_SUITE_OWNER", os.path.basename(home.rstrip("/"))
         )
@@ -320,18 +320,18 @@ class CylcVersion:
         """Path to the processed suite file."""
 
         if self.version == 7:
-            path = os.path.join(self.cylc_path, self.PROCESSED_SUITE_RC_CYLC7)
+            path = self.cylc_path / self.PROCESSED_SUITE_RC_CYLC7
 
         else:
             path = None
             for filename in os.listdir(self.cylc_config):
-                path = os.path.join(self.cylc_config, filename)
-                if os.path.isfile(path) and self.ROSE_SUITE_RUN_CONF_CYLC8 in filename:
+                path = self.cylc_config / filename
+                if path.is_file() and self.ROSE_SUITE_RUN_CONF_CYLC8 in str(filename):
                     break
 
         # Check file exist and force an exception if not
-        path = os.path.realpath(path)
-        os.stat(path)
+        path = path.absolute()
+        path.stat()
 
         return path
 
@@ -340,17 +340,21 @@ class CylcVersion:
         """Path to the Rose suite run file."""
 
         if self.version == 7:
-            path = os.path.join(self.cylc_log, self.ROSE_SUITE_RUN_CONF_CYLC7)
+            path = self.cylc_log / self.ROSE_SUITE_RUN_CONF_CYLC7
 
         else:
-            glob_format = os.path.join(
-                self.cylc_config, f"*{self.ROSE_SUITE_RUN_CONF_CYLC8}"
-            )
-            path = glob.glob(glob_format)[0]
+            # Catch the first file in the directory
+            path = None
+            for path in self.cylc_config.glob(f"*{self.ROSE_SUITE_RUN_CONF_CYLC8}"):
+                break
+
+            if path is None:
+                raise IOError(2, "Suite config file not found",
+                              str(self.cylc_config))
 
         # Check file exist and force an exception if not
-        path = os.path.realpath(path)
-        os.stat(path)
+        path = path.absolute()
+        path.stat()
 
         return path
 
@@ -359,14 +363,14 @@ class CylcVersion:
         """Database file."""
 
         if self.version == 7:
-            path = os.path.join(self.cylc_path, self.SUITE_DB_FILENAME_CYLC7)
+            path = self.cylc_path / self.SUITE_DB_FILENAME_CYLC7
 
         else:
-            path = os.path.join(self.cylc_log, self.SUITE_DB_FILENAME_CYLC8)
+            path = self.cylc_log / self.SUITE_DB_FILENAME_CYLC8
 
         # Check file exist and force an exception if not
-        path = os.path.realpath(path)
-        os.stat(path)
+        path = path.absolute()
+        path.stat()
 
         return path
 
@@ -382,10 +386,10 @@ class CylcVersion:
 
         find_proj_name = re.compile(r"/(\w+)-\d+.version")
         version_files = []
-        version_files = glob.glob(f"{self.cylc_path}/log/*.version")
+        version_files = (self.cylc_path / "log ").glob("/*.version")
 
         for vfile in version_files:
-            if "rose-suite-run.version" in vfile:
+            if "rose-suite-run.version" in vfile.name:
                 continue
             result = find_proj_name.search(vfile)
             if result:
@@ -394,7 +398,7 @@ class CylcVersion:
                 url, revision, wc_changes = self._cylc7_parse_details(vfile)
                 projects[project]["last changed rev"] = revision
                 projects[project]["working copy changes"] = wc_changes
-                projects[project]["version file"] = os.path.basename(vfile)
+                projects[project]["version file"] = vfile.name
                 if wc_changes:
                     uncommitted_changes += 1
                 if url is not None:
@@ -446,7 +450,7 @@ class CylcVersion:
         projects = {}
         uncommitted_changes = 0
 
-        vcs_path = os.path.join(self.cylc_log, "version", "vcs.json")
+        vcs_path = self.cylc_log / "version" / "vcs.json"
         with open(vcs_path, encoding="utf-8") as vcs_file:
             vcs_data = json.load(vcs_file)
 
@@ -508,6 +512,7 @@ class CylcVersion:
 
     def task_states(self):
         """Query the database and return a dictionary of states."""
+
         database = sqlite3.connect(self.database_path)
         cursor = database.cursor()
         cursor.execute("select name, status from task_states;")
@@ -533,6 +538,10 @@ class CylcVersion:
             # Next try cylc 7
             path = os.environ.get("CYLC_SUITE_RUN_DIR")
 
+        if path is not None:
+            # Convert valid paths to pathlibs
+            path = Path(path)
+
         # Return the path or None if environment is not set
         return path
 
@@ -541,11 +550,8 @@ class CylcVersion:
 
         """Path to the suite scheduler log."""
 
-        path = os.path.join(
-            self.cylc_log, "suite" if self.version == 7 else "scheduler", "log"
-        )
-
-        return os.path.realpath(path)
+        path = self.cylc_log / ("suite" if self.version == 7 else "scheduler", "log")
+        return path.absolute()
 
 
 class Project:
@@ -2405,9 +2411,9 @@ def main():
     trac_log = io.StringIO()
 
     try:
-        # Handle all errors at the top of the script.  This ensures
-        # that all exceptions are handled and, where possible, added
-        # to the trac.log
+        # Handle setup and query errors first because there is nothing
+        # useful in the trac.log buffer if a failure occurs at this
+        # point
         suite_report = SuiteReport(
             suite_path=opts.suite_path,
             log_path=opts.log_path,
@@ -2415,6 +2421,14 @@ def main():
             sort_by_name=opts.sort_by_name,
         )
 
+    except IOError as err:
+        # FIXME: handle IO and environment errors gracefully
+        print(f"[ERROR]: {err}")
+        raise SystemExit(1) from err
+
+    try:
+        # Handle report generation errors differently because there
+        # might be something useful in the report buffer
         suite_report.print_report(trac_log)
 
     except Exception as err:
@@ -2423,13 +2437,11 @@ def main():
         # is caught and reported here, the traceback lacks
         # information about the caller
 
-        print(
-            "There has been an exception in SuiteReport. ",
-            "See output for more information",
-            "rose-stem suite output will be in the files :\n",
-            f"{suite_report.suite_scheduler_log_path}\n",
-            file=trac_log
-        )
+        print("There has been an exception in SuiteReport. ",
+              "See output for more information",
+              "rose-stem suite output will be in the files :\n",
+              f"{suite_report.cylc_version.suite_scheduler_log_path}\n",
+              file=trac_log)
 
         # Write traceback to the log
         traceback.print_exception(err, file=trac_log)
