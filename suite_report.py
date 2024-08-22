@@ -2295,8 +2295,6 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         header.send(["Site", self.site])
         header.send(["Groups Run", self.generate_groups(self.groups)])
         header.send(["''ROSE_ORIG_HOST''", self.rose_orig_host])
-
-        # FIXME: host_xcs produces the right value
         header.send(["HOST_XCS", self.host_xcs])
 
     def print_report(self, trac_log):
