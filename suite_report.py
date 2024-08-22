@@ -167,20 +167,6 @@ COMMON_GROUPS = {
 }
 
 
-def _write_file(filename, lines, newline=False):
-    """Takes filemname and list of strings and opt newline boolean.
-    Writes array to file of given name.
-    The optional newline argument adds a newline at the end of each
-    element of the list.
-    Returns None"""
-    retn = "\n" if newline else ""
-    with open(filename, "w", encoding="utf-8") as filehandle:
-        if isinstance(lines, list):
-            filehandle.write(retn.join(lines) + retn)
-        elif isinstance(lines, io.StringIO):
-            filehandle.write(lines.getvalue() + retn)
-
-
 def _run_command(command, ignore_fail=False):
     """Takes command and command line options as a list.
     Runs the command with subprocess.Popen.
@@ -2346,7 +2332,9 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         # Attempt to provide user with some output,
         # even in event of serious exceptions
         try:
-            _write_file(trac_log_path, trac_log, newline=True)
+            with open(trac_log_path, "w", encoding="utf-8") as fd:
+                print(trac_log.getvalue(), file=fd)
+
         except IOError:
             print(
                 f"[ERROR] Writing to {TRAC_LOG_FILE} file : {trac_log_path}"
