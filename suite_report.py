@@ -1959,7 +1959,6 @@ class SuiteReport(TracFormatter):
             print("", file=output)
 
         # Finally, append the task table to the output buffer
-        print("", file=output)
         print(task_table.getvalue(), file=output)
 
     # pylint: enable=too-many-statements
@@ -2248,9 +2247,7 @@ class SuiteReport(TracFormatter):
         data = self.cylc_version.task_states()
 
         self.generate_task_table(data, output=trac_log)
-        print("", file=trac_log)
         print("}}}", file=trac_log)
-        print("", file=trac_log)
 
     def write_final_report(self, trac_log):
 
