@@ -167,21 +167,6 @@ COMMON_GROUPS = {
 }
 
 
-# FIXME: retire _read_file function
-def _read_file(filename):
-    """Takes filename (str)
-    Return contents of a file, as list of strings."""
-    if os.path.exists(filename):
-        with open(filename, "r", encoding="utf-8") as filehandle:
-            lines = filehandle.readlines()
-    else:
-        print(f'[ERROR] Unable to find file :\n    "{filename}"')
-        raise IOError(
-            f'_read_file got invalid filename : "{filename}"'
-        )
-    return lines
-
-
 def _write_file(filename, lines, newline=False):
     """Takes filemname and list of strings and opt newline boolean.
     Writes array to file of given name.
@@ -308,36 +293,6 @@ def _url_to_trac_link(url):
     else:
         link_2_url = None
     return link_2_url
-
-
-def _parse_string(
-    varname,
-    lines,
-    remove_quotes=True,
-    split_on_comma=False,
-    default_unknown=False,
-):
-    """Given a variable name in the rose-suite-run.conf file, return its
-    value."""
-    find_var = re.compile(rf"{varname}\s*=\s*(.*)")
-    if split_on_comma:
-        value = [None]
-    elif default_unknown:
-        value = "Unknown"
-    else:
-        value = None
-    for line in lines:
-        result = find_var.search(line)
-        if result:
-            value = result.group(1)
-            if remove_quotes:
-                value = _remove_quotes(value.rstrip())
-            if split_on_comma:
-                # Remove brackets and split on comma
-                value = re.sub(r"\[", r"", value)
-                value = re.sub(r"\]", r"", value)
-                value = value.split(",")
-    return value
 
 
 class CylcVersion:
@@ -1230,6 +1185,12 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         self.suite_path = os.path.abspath(suite_path)
 
         self.cylc_version = CylcVersion(self.suite_path)
+        self.cylc = str(self.cylc_version.version)
+        self.fcm = None
+        self.rose = None
+
+        self.host_xcs = False
+        self.trustzone = os.environ.get("TRUSTZONE", None)
 
         self.log_path = log_path
         self.sort_by_name = sort_by_name
@@ -1324,67 +1285,91 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         )
         sources = {}
         multiple_branches = {}
-        for line in _read_file(srp_file):
-            # check for ROSE_ORIG_HOST
-            result = find_orig_host.search(line)
-            if result:
-                rose_orig_host = result.group(1).rstrip()
-            # check for SOURCE_.*
-            result = find_sources.match(line)
-            # Discard the ones which were SOURCE_PROJ_REV
-            if result and result.group(2) != "_REV":
-                # Allow SOURCE_PROJ to override any existing entries
-                # Otherwise only add new entries
-                if result.group(1) not in sources or result.group(2) == "":
-                    sources[result.group(1)] = {}
-                    if " " in result.group(3):
-                        multiple_branches[(result.group(1))] = result.group(3)
-                        sources[result.group(1)][
-                            "tested source"
-                        ] = result.group(3).split()[0]
-                    else:
-                        sources[result.group(1)][
-                            "tested source"
-                        ] = result.group(3)
+
+        with open(srp_file, encoding="utf-8") as source:
+            for line in source:
+                # check for ROSE_ORIG_HOST
+                result = find_orig_host.search(line)
+                if result:
+                    rose_orig_host = result.group(1).rstrip()
+                # check for SOURCE_.*
+                result = find_sources.match(line)
+                # Discard the ones which were SOURCE_PROJ_REV
+                if result and result.group(2) != "_REV":
+                    # Allow SOURCE_PROJ to override any existing entries
+                    # Otherwise only add new entries
+                    if result.group(1) not in sources or result.group(2) == "":
+                        sources[result.group(1)] = {}
+                        if " " in result.group(3):
+                            multiple_branches[(result.group(1))] = result.group(3)
+                            sources[result.group(1)][
+                                "tested source"
+                            ] = result.group(3).split()[0]
+                        else:
+                            sources[result.group(1)][
+                                "tested source"
+                            ] = result.group(3)
 
         self.rose_orig_host = rose_orig_host
         self.job_sources += sources
         self.multi_branches = multiple_branches
+
+    @staticmethod
+    def unpack_suite_value(value, remove_quotes=True, split_on_comma=False):
+
+        """Unpack a value field from the suite file."""
+
+        value = value.strip()
+        if remove_quotes:
+            value = _remove_quotes(value)
+
+        if split_on_comma:
+            # Remove brackets and split on comma
+            value = value.replace("[", "").replace("]", "")
+            value = [i.strip() for i in value.split(",")]
+
+        return value
 
     def parse_rose_suite_run(self):
         """Parse rose-suite-run.conf file.
         Takes full path for suite dir.
         Sets class variables"""
 
-        lines = _read_file(self.cylc_version.rose_suite_run_path)
-        self.site = _parse_string("SITE", lines, default_unknown=True)
-        self.groups = _parse_string(
-            "RUN_NAMES", lines, split_on_comma=True, remove_quotes=False
-        )
-        self.fcm = _parse_string("FCM_VERSION", lines)
-        self.cylc = _parse_string("CYLC_VERSION", lines)
-        if not self.cylc:
-            self.cylc = str(self.cylc_version.version)
-        self.rose = _parse_string("ROSE_VERSION", lines)
+        compare = {}
+
+        with open(self.cylc_version.rose_suite_run_path, encoding="utf-8") as source:
+            for line in source:
+                if "=" not in line:
+                    # Ignore non-keyword lines
+                    continue
+
+                key, value = line.strip().split("=", 1)
+
+                if key == "SITE":
+                    self.site = self.unpack_suite_value(value)
+
+                elif key == "RUN_NAMES":
+                    self.groups = self.unpack_suite_value(value, False, True)
+
+                elif key in ("FCM_VERSION", "CYLC_VERSION", "ROSE_VERSION"):
+                    target = key.lower().split("_")[0]
+                    value = self.unpack_suite_value(value)
+                    if value != "":
+                        setattr(self, target, value)
+
+                elif key in ("COMPARE_OUTPUT", "COMPARE_WALLCLOCK"):
+                    compare[key] = "true" in value.lower()
+
+                elif ((key == "METO_HPC_GROUP" and "xcs" in value)
+                      or "HOST_XC40='xcsr'" in line):
+                    self.host_xcs = True
 
         # This test is a little problematic when running this script
         # on a JULES rose-stem suite as JULES has no 'need' of the two
         # compare variables and to prevent the warning their absence
         # would produce from occuring unnecessarily in JULES they have
         # been added to rose-suite.conf for now
-        compare_output = _parse_string("COMPARE_OUTPUT", lines)
-        compare_wallclock = _parse_string("COMPARE_WALLCLOCK", lines)
-        self.required_comparisons = (
-            compare_output == "true" and compare_wallclock == "true"
-        )
-
-        self.trustzone = os.environ.get("TRUSTZONE", None)
-
-        self.host_xcs = False
-        if self.site == "meto":
-            for line in lines:
-                if "HOST_XC40='xcsr'" in line:
-                    self.host_xcs = True
+        self.required_comparisons = all(compare.values())
 
     def initialise_projects(self):
         """Uses fcm kp to initialise a directory containing project keywords
@@ -2157,10 +2142,8 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
             r"(?P<num>[0-9]*\.[0-9]*)(?P<unit>[A-Za-z])"
         )
 
-        # pylint: disable=broad-exception-caught
-
-        try:
-            for line in _read_file(filename):
+        with open(filename, encoding="utf-8") as source:
+            for line in source:
                 result = find_wallclock.search(line)
                 if result:
                     wallclock = int(round(float(result.group(1))))
@@ -2178,17 +2161,6 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                             memory *= 1000
                     else:
                         memory = int(line.split()[6])
-        except Exception as err:
-            wallclock = "Failure processing EOJ"
-            memory = "Failure processing EOJ"
-            stacktr = traceback.format_exc()
-            print(
-                f"[ERROR] Processing wallclock and memory use :\n{stacktr}"
-            )
-            print(f"Error type : {type(err)}")
-            print(err)
-
-        # pylint: enable=broad-exception-caught
 
         return wallclock, memory
 
