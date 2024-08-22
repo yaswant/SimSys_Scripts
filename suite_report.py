@@ -1503,7 +1503,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
 
         return owners_dict
 
-    def create_approval_table(self, needed_approvals, mode):
+    def create_approval_table(self, needed_approvals, mode, output=sys.stdout):
         """
         Function to write out the trac.log table for config and CO approvals
         Input: needed_approvals - dictionary with keys as owners and values,
@@ -1511,8 +1511,6 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                mode - either "config" or "code" depending on
                       which type of table is being created
         """
-
-        result = io.StringIO()
 
         if mode == "config":
             columns = ["Owner", "Approval", "Configs"]
@@ -1522,7 +1520,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         table = self.gen_trac_table(
             columns=columns,
             title="Required " + mode.capitalize() + " Owner Approvals",
-            output=result)
+            output=output)
 
         # Initialise the table
         table.send(None)
@@ -1543,10 +1541,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
                 table.send([owner, "Pending", approvals])
 
         # Always add a trailing newline
-        result.write("\n")
-
-        # FIXME: temporary conversion back to a list
-        return result.getvalue().split("\n")
+        print("", file=output)
 
     def get_config_owners(self, failed_configs, config_owners):
         """
@@ -1591,14 +1586,14 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
 
         return needed_approvals
 
-    def required_config_approvals(self, failed_configs):
+    def required_config_approvals(self, failed_configs, output=sys.stdout):
         """
         Calls functions to create a table of required config approvals
         """
 
         config_owners = self.generate_owner_dictionary("config")
         if config_owners is None:
-            return None
+            return
 
         config_approvals = self.get_config_owners(failed_configs,
                                                   config_owners)
@@ -1606,9 +1601,7 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
         if len(config_approvals.keys()) == 0:
             config_approvals = None
 
-        approval_table = self.create_approval_table(config_approvals, "config")
-
-        return approval_table
+        self.create_approval_table(config_approvals, "config", output)
 
     @staticmethod
     def lookup_ownership_section(fle):
@@ -1739,22 +1732,20 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
 
         return needed_approvals
 
-    def required_co_approvals(self):
+    def required_co_approvals(self, output=sys.stdout):
         """
         Calls functions to create table of code owner approvals
         """
 
         code_owners = self.generate_owner_dictionary("code")
         if code_owners is None:
-            return None
+            return
 
         code_approvals = self.get_code_owners(code_owners)
         if code_approvals is False:
-            return None
+            return
 
-        approval_table = self.create_approval_table(code_approvals, "code")
-
-        return approval_table
+        self.create_approval_table(code_approvals, "code", output)
 
     @staticmethod
     def parse_lfric_extract_list(fpath="~/temp.txt"):
@@ -1884,22 +1875,14 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
 
     def gen_code_and_config_table(self, failed_configs, output=sys.stdout):
 
-        """Generate config/code owners table for the UM."""
+        """Generate config/code owners table for the UM.
 
-        # Generate table for required config and code owners
-        # Only run if a UM suite
-        return_list = []
+        Generate table for required config and code owners.  Only run
+        if a UM suite
+        """
 
-        co_approval_table = self.required_co_approvals()
-        if co_approval_table:
-            return_list += co_approval_table
-        config_approval_table = self.required_config_approvals(
-            failed_configs
-        )
-        if config_approval_table:
-            return_list += config_approval_table
-
-        print("\n".join(return_list), file=output)
+        self.required_co_approvals(output)
+        self.required_config_approvals(failed_configs, output)
 
     @staticmethod
     def forced_status_sort(item_tuple):
@@ -2318,7 +2301,6 @@ class SuiteReport(SuiteReportDebug, TracFormatter):
 
         data = self.cylc_version.task_states()
 
-        # FIXME: Change the method to print to the handle
         self.generate_task_table(data, output=trac_log)
         print("", file=trac_log)
         print("}}}", file=trac_log)
