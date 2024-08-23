@@ -170,10 +170,26 @@ COMMON_GROUPS = {
 
 
 def _run_command(command, ignore_fail=False):
-    """Takes command and command line options as a list.
-    Runs the command with subprocess.Popen.
-    Returns the exit code, standard out and standard error as list.
+
+    """Run a command and capture its output.
+
+    A wrapper function that runs a command and returns the output in a
+    usable form.
+
+    Args:
+        command (:obj:`list` of :obj:`str`): elements of the command
+            being run
+        ignore_fail (:obj:`bool`, optional): whether to raise an
+            exception on a non-zero return code
+
+    Returns:
+        tuple: the exit code as an integer, standard output and
+            stadnard error as lists of lines.
+
+    Raises:
+        IOError: if ignore_fail is set and the command returns non-zero
     """
+
     with subprocess.Popen(
             command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             encoding="utf-8",
@@ -185,6 +201,7 @@ def _run_command(command, ignore_fail=False):
             pobj.stderr.read(),
         )
     if retcode != 0 and not ignore_fail:
+        # FIXME: replace with a custom exception
         print(f"[ERROR] running {command}")
         print(f"[INFO] RC: {retcode}")
         print(f"[INFO] Stdout: {stdout}")
@@ -198,9 +215,15 @@ def _run_command(command, ignore_fail=False):
 
 
 def _remove_quotes(string):
-    """Takes, modifies and returns string.
-    Removes all quotes from the string.
-    None input results in None output"""
+
+    """Remove double and single quotes from a string.
+
+    Args:
+        string (str): input string or None
+
+    Returns:
+        str: input value without the quotes or None if input was None
+    """
     if string is not None:
         string = re.sub(r'"', r"", string)
         string = re.sub(r"'", r"", string)
@@ -208,18 +231,36 @@ def _remove_quotes(string):
 
 
 def _dict_merge(main_dict, addon_dict, force=False):
-    """Merge addon dictionary into main dictionary.
-    Takes main_dict, addon_dict and optional bool 'force'
-    Returns new merged dictionary.
-    Optional argument force=True allows forced overwrite of existing
-    value with None from the addon dictionary. Otherwise original
-    value is preserved when value in addon dict is None.
-    This preserving behaviour differentiates it from main.update(addon)"""
+
+    """Selectively combine two dictionaries to create a new one.
+
+    Create a copy of a dictionary that contains items from a second
+    that are not in the first.  If any entry in the addon dictionary
+    is itself a dictionary, its contents are duplicated by
+    _dict_merge.
+
+    Where an item is in both dictionaries, the value in main has
+    priority unless force is True.  Where a key does not exist in main
+    and the value in addon is None, a new key will not be set in main
+    unless force is True.  These behaviours differentiate it from
+    dict.update()
+
+    Args:
+        main_dict (dict): dictionary of base values
+        addon_dict (dict): dictionary to merge into the main one
+        force (:obj:`bool`, optional): always copy the value from
+            addon, even it is None.  Default is False, which implies
+            that keys with None values will not be set.
+
+    Returns:
+        dict: copy of the main dictionary with addon items merged in
+    """
     merged_dict = main_dict.copy()
     for key, value in addon_dict.items():
         if isinstance(value, dict):
             if key not in merged_dict:
                 merged_dict[key] = {}
+            # FIXME: recursive call should pass the caller's force setting?
             merged_dict[key] = _dict_merge(merged_dict[key], value)
         else:
             # Switch to Force main to take whatever addon has
@@ -231,31 +272,18 @@ def _dict_merge(main_dict, addon_dict, force=False):
     return merged_dict
 
 
-def _select_preferred(option_list):
-    """Takes a list of strings, returns the fist one that is not None.
-    If the strings are report text in preffered order it essentially
-    ensures you get the preffered option from a list of choices."""
-    pref_opt = None
-    for choice in option_list:
-        if choice is not None:
-            pref_opt = choice
-            break
-    return pref_opt
-
-
-def _escape_svn(url):
-    """Takes and returns url as string.
-    Escape 'svn:' urls as Trac tries to convert them to links."""
-    if not re.search(r"!svn://", url):  # Make sure it's not already escaped.
-        url = re.sub(r"svn://", r"!svn://", url)
-    return url
-
-
 def _get_current_head_revision(mirror_url, fcm_exec):
-    """Given a mirror repository (local) url, uses fcm branch-info to
-    retrieve and append the head revision number.
-    Requires url and fcm exec path (strings)
-    Returns revision number as string"""
+
+    """Get the head revision using a local mirror URL.
+
+    Args:
+        mirror_url (str): location of the local mirror repository
+        fcm_exec (str): path to the FCM command
+
+    Returns:
+        str: the revision number of the head of the project trunk or
+            or an empty string if no revision was found.
+    """
     revision = ""
     _, stdout, _ = _run_command([fcm_exec, "branch-info", mirror_url])
     find_last_changed_rev = re.compile(r"Last Changed Rev:\s*(\d+)")
@@ -268,9 +296,17 @@ def _get_current_head_revision(mirror_url, fcm_exec):
 
 
 def _url_to_trac_link(url):
-    """Takes a URL as string, edits text to resemble a Trac link for code
-    on the SRS.
-    Returns Trac link form of URL or None if 'svn' was absent from the url.
+    """Convert a URL to a Trac code link.
+
+    Takes a URL amd edits text to resemble a Trac link for code on the
+    SRS.
+
+    Args:
+        url (str): a subversion URL
+
+    Returns:
+        str: a Trac link form of URL or None if 'svn' was absent from
+            the url
     """
     if re.search(r"/svn/", url):
         link_2_url = re.sub(r"svn", r"trac", url)
@@ -284,7 +320,14 @@ def _url_to_trac_link(url):
 
 
 class CylcVersion:
-    """Clas to abstract cylc configuration."""
+    """Class to abstract cylc configuration.
+
+    An interface to cylc workflows which can be used with both cylc 7
+    and cylc 8.
+
+    Args:
+        cylc_path (str): root directory of an installed cylc workflow
+    """
 
     PROCESSED_SUITE_RC_CYLC7 = "suite.rc.processed"
     ROSE_SUITE_RUN_CONF_CYLC7 = "rose-suite-run.conf"
@@ -362,7 +405,7 @@ class CylcVersion:
 
     @property
     def database_path(self):
-        """Database file."""
+        """Path to the cylc database."""
 
         if self.version == 7:
             path = self.cylc_path / self.SUITE_DB_FILENAME_CYLC7
@@ -379,8 +422,12 @@ class CylcVersion:
     def _cylc7_project_details(self):
         """Get cylc 7 project details.
 
-        Locate the .version files and parse them to obtain a
+        Locates the .version files and parse them to obtain a
         dictionary of projects and a count of uncommitted changes.
+
+        Returns:
+            tuple: a dictionary of projects and an integer containing the
+                number of uncommitted changes
         """
 
         projects = {}
@@ -416,12 +463,18 @@ class CylcVersion:
     def _cylc7_parse_details(vfile):
         """Parse a cylc 7 version file.
 
-        Parse a versions file to extract the url and revision for the
+        Parses a versions file to extract the url and revision for the
         branches behind any working copies, plus any uncommitted
         changes.
 
-        Takes full path to a .version file.  Returns url and revision
-        as strings plus wc changes as boolean.
+        Args:
+            vfile (Path): location of the .version file
+
+        Returns:
+
+            tuple: a string containing a URL, a string containg the
+                revions, and boolean indicating whether there are
+                changes to the working copy.
         """
 
         url = None
@@ -447,6 +500,10 @@ class CylcVersion:
 
         Parse the cylc vcs.json file to obtain a dictionary of
         projects and a count of uncommitted changes.
+
+        Returns:
+            tuple: a dictionary of projects and an integer containing the
+                number of uncommitted changes
         """
 
         projects = {}
@@ -504,7 +561,12 @@ class CylcVersion:
         """Get project details.
 
         Obtain a dictionary of projects and a count of uncommitted
-        changes.
+        changes for a workflow, independent of the version of cylc
+        being used.
+
+        Returns:
+            tuple: a dictionary of projects and an integer containing the
+                number of uncommitted changes
         """
 
         if self.version == 7:
@@ -513,7 +575,15 @@ class CylcVersion:
         return self._cylc8_project_details()
 
     def task_states(self):
-        """Query the database and return a dictionary of states."""
+        """Get task states from the cylc database.
+
+        Uses sqlite3 to query the cylc database for information about
+        the states of the tasks in the workflow.
+
+        Returns:
+            dict: a dictionary of task states where they keys are the
+                task names and the values are states as strings.
+        """
 
         database = sqlite3.connect(self.database_path)
         cursor = database.cursor()
@@ -528,9 +598,15 @@ class CylcVersion:
     def default_cylc_path(cls):
         """Default cylc directory path.
 
-        Use environment variables to guess at the path to the cylc
-        workflow directory.  If the path cannot be obtained from the
-        environment, return None.
+        Uses environment variables to guess at the path to the cylc
+        workflow directory.
+
+        This class method is intended to be used to set a sensible
+        default for use with ArgumentParser.
+
+        Returns:
+            str: the path of the workflow or None if the path cannot
+                be obtained from the environment
         """
 
         # Try cylc 8 first
@@ -1051,12 +1127,16 @@ class TracFormatter:
         Optional Bool "bold" turns on Trac formatting of bold text.
         Formats text as a Trac link if link is not None.
         """
-        text = _select_preferred(text_list)
+        # FIXME: update docstring
+        # Get the first non-None item in the text list, if any
+        text = next((i for i in text_list if i is not None), None)
         highlight = "'''" if bold else ""
         if text is not None and link is not None:
             element = f" {highlight}[{link} {text}]{highlight} "
         elif text is not None:
-            element = f" {highlight}{_escape_svn(text)}{highlight} "
+            # Insert an escape character into svn URLs if necessary
+            text = re.sub(r"(?<!!)(svn://)", r"!\1", text)
+            element = f" {highlight}{text}{highlight} "
         else:
             element = ""
         return element
