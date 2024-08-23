@@ -5,25 +5,27 @@
 # For further details please refer to the file COPYRIGHT.txt
 # which you should have received as part of this distribution.
 # *****************************COPYRIGHT*******************************
+#
+# NOTE
+#
+# This module is one of several for which the Master copy is in the
+# UM repository. When making changes, please ensure the changes are
+# made in the UM repository or they will be lost during the release
+# process when the UM copy is copied over.
+#
+
+# The module docstring doubles as the command line description
 """
-   ## NOTE ##
+Process a cylc workflow and write a summary file using Trac wiki
+markup.  If a local project mirror cannot be found, it will be
+excluded from the final report.
 
-   This module is one of several for which the Master copy is in the
-   UM repository. When making changes, please ensure the changes are
-   made in the UM repository or they will be lost during the release
-   process when the UM copy is copied over.
+The command can be triggered automatically at the end of a workflow by
+adding the following to the cylc configuration:
 
-   Script to process the results of a suite and write a summary to file. The
-   summary is in Trac wiki mark-up. Any projects that do not have a local
-   mirror repository are assumed not to be used at that site and are
-   excluded from the report.
+    shutdown handler = "suite_report.py"
 
-   Owner: Scientific Software Development and Deployment team
-          (formerly : UM System Development Team)
-   Cylc Suite Syntax: shutdown handler = "suite_report.py"
-   Command Line syntax:
-       suite_report.py -S <suite_dir> [-v] [-q] [-N] [-L <log_dir>]
-
+For interactive use, see the --help information.
 """
 
 # pylint: disable=too-many-lines
@@ -2347,7 +2349,7 @@ def parse_arguments():
     )
 
     parser = ArgumentParser(usage="%(prog)s [options] [args]",
-                            description="Generate a suite report",
+                            description=__doc__,
                             formatter_class=RawDescriptionHelpFormatter)
 
     paths = parser.add_argument_group("location arguments")
