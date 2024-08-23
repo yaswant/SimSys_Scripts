@@ -1125,7 +1125,7 @@ class SuiteReport(TracFormatter):
         also the boolean sort_by_name to force sorting by task name over
         status when generating the task table in the report.
         """
-        self.suite_path = os.path.abspath(suite_path)
+        self.suite_path = Path(suite_path).absolute()
 
         self.cylc_version = CylcVersion(self.suite_path)
         self.cylc = str(self.cylc_version.version)
@@ -1160,13 +1160,19 @@ class SuiteReport(TracFormatter):
         try:
             # Resolve "runN" soft link - Required for Cylc8
             # cylc-review path
-            link_target = os.readlink(self.suite_path)
-            suitename = os.path.join(os.path.dirname(self.suite_path),
-                                     link_target)
+            link_target = self.suite_path.readlink()
+
+            if link_target.is_absolute():
+                # Link target is already an absolute path
+                suitename = link_target
+            else:
+                # Link target is relative to its parent
+                suitename = self.suite_path.parent / link_target
+
         except OSError:
             suitename = self.suite_path
 
-        suite_dir, self.suitename = suitename.split("cylc-run/")
+        suite_dir, self.suitename = str(suitename).split("cylc-run/")
         # Default to userID from suite path unless CYLC_SUITE_OWNER is
         # present
         self.suite_owner = os.environ.get(
@@ -1366,14 +1372,13 @@ class SuiteReport(TracFormatter):
                                  dir=self.tmpdir.name)
 
         fname = fname.lstrip("/")
-        outname = os.path.expanduser(outname)
 
         # Try 5 times, if all fail then use working copy version
         for _ in range(5):
             try:
                 subproc = f"fcm export -q {repo_url}/{fname} {outname} --force"
                 subprocess.check_output(subproc, shell=True)
-                return outname
+                return Path(outname)
             except subprocess.CalledProcessError as error:
                 print(error)
 
@@ -1391,11 +1396,12 @@ class SuiteReport(TracFormatter):
                 self.job_sources["UM"]["tested source"]
             )
             if not wc_path:
+                # Empty value means use current working directory
                 wc_path = ""
-            file_path = os.path.join(wc_path, fname)
+            file_path = Path(wc_path) / fname
             print(f"Using the checked out version of {fname} file")
 
-        return file_path
+        return Path(file_path)
 
     def generate_owner_dictionary(self, mode):
         """
@@ -1706,6 +1712,8 @@ class SuiteReport(TracFormatter):
         Return a dictionary with keys 'files' and 'dirs'
         """
 
+        fpath = Path(fpath)
+
         files = []
         dirs = []
         in_include_section = False
@@ -1713,7 +1721,7 @@ class SuiteReport(TracFormatter):
         # Jules also depends on the shared metadata files so add those manually
         dirs.append("rose-meta/jules-shared")
 
-        with open(os.path.expanduser(fpath), encoding="utf-8") as input_file:
+        with open(fpath.expanduser(), encoding="utf-8") as input_file:
             for line in input_file:
                 line = line.strip()
                 if in_include_section:
@@ -2030,10 +2038,9 @@ class SuiteReport(TracFormatter):
         table = None
         found_nothing = True
         for job in RESOURCE_MONITORING_JOBS[self.site]:
-            filename = os.path.join(
-                self.suite_path, "log", "job", "1", job, "NN", "job.out"
-            )
-            if os.path.isfile(filename):
+            filename = self.suite_path / "log" / "job" / "1" / job / "NN" / "job.out"
+
+            if filename.is_file():
                 wallclock, memory = self.get_wallclock_and_memory(filename)
                 if wallclock and memory:
                     if found_nothing:
@@ -2259,10 +2266,9 @@ class SuiteReport(TracFormatter):
 
         """Write the report to a file or to stdout."""
 
-        trac_log_path = os.path.join(self.log_path
-                                     if self.log_path else
-                                     self.suite_path,
-                                     TRAC_LOG_FILE)
+        trac_log_path = (self.log_path
+                         if self.log_path else
+                         self.suite_path) / TRAC_LOG_FILE
 
         # Attempt to provide user with some output,
         # even in event of serious exceptions
@@ -2300,28 +2306,33 @@ def get_working_copy_path(path):
                 contains the hostname in the format <hostname>:<path>.
                 Python seems unable to parse this hence the code below.
     """
-    if not os.path.exists(path):
-        try:
-            path = path.split(":")[1]
-            if not os.path.exists(path):
-                return None
-        except IndexError:
-            return None
-    return path
+    working = Path()
+
+    if working.exists():
+        return working
+
+    # Try to split off a leading hostname portion
+    working = Path(path.split(":", 1)[-1])
+    if working.exists():
+        return working
+
+    return None
 
 
 def directory_type(opt):
 
     """Check location exists and is a directory."""
 
-    if not os.path.exists(opt):
-        raise ArgumentTypeError(f"location {repr(opt)} does not exist")
+    opt = Path(opt)
 
-    if not os.path.isdir(opt):
-        raise ArgumentTypeError(f"location {repr(opt)} is not a directory")
+    if not opt.exists():
+        raise ArgumentTypeError(f"location {str(opt)} does not exist")
+
+    if not opt.is_dir():
+        raise ArgumentTypeError(f"location {str(opt)} is not a directory")
 
     # Return canonical directory with symlinks fully resolved
-    return os.path.realpath(opt)
+    return opt.absolute()
 
 
 def parse_arguments():
