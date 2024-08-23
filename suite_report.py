@@ -1214,12 +1214,36 @@ class JobSources:
 
 class TracFormatter:
 
-    """Format items for use with the Trac wiki."""
+    """Mixin which formats items for use with the Trac wiki.
+
+    A mixin which contains a set of methods which can be used to send
+    Trac wiki formatted items to an output stream.  These can be used
+    with an io.StringIO instance to buffer the output rather than
+    writing out immediately.
+
+    This class makes use of the ability to send values to generators.
+    Note that the first send to a new generator always needs to be
+    None to run the generator code to the first yield point.
+    """
 
     @staticmethod
     def gen_trac_header(title=None, output=sys.stdout):
 
-        """Create a tabulated report header."""
+        """Create a tabulated report header.
+
+        Uses a generator which allows header fields - a keyword and a
+        value - to be added to a table that does have column headers.
+        This is intended to be used to generate the header section of
+        a the suite report.
+
+        Args:
+            title (:obj:`str`, optional): an optional section heading
+                to add to the output stream before the tabular fields.
+                Defaults to None which implies no section header is
+                required
+            output (:obj:`io`, optional): an IO stream of some sort.
+                Defaults to sys.stdout
+        """
 
         if title is not None:
             print(f" = {title} = \n", file=output)
@@ -1236,12 +1260,27 @@ class TracFormatter:
 
     @staticmethod
     def gen_text_element(text_list, link, bold=False):
-        """Takes list of items (strings or Nones) in preference order.
-        Calls _select_preferred to get the first non None entry in list.
-        Optional Bool "bold" turns on Trac formatting of bold text.
-        Formats text as a Trac link if link is not None.
+
+        """Generate a Trac format text element.
+
+        Takes a list of text items, finds the first non-None value,
+        and converts it into a Trac wiki-formatted string.
+
+        Args:
+            text_list (:obj:`list` of :obj:`str`): a list of values
+                which should be strings which which may be None.  The
+                first non-None value is assumed to be the required
+                string
+            link (str): a string containing a URL or None
+            bold (:obj:`bool`, optional): whether to add Trac bold
+                codes around the text item.  Defaults to False which
+                implies that bold should not be applied
+
+        Returns:
+            str: a formatted string containing the first text string
+                or an empty string if no non-None values can be found
+                in text_list
         """
-        # FIXME: update docstring
         # Get the first non-None item in the text list, if any
         text = next((i for i in text_list if i is not None), None)
         highlight = "'''" if bold else ""
@@ -1258,7 +1297,26 @@ class TracFormatter:
     @staticmethod
     def gen_trac_table(columns, title=None, preamble=None, output=sys.stdout):
 
-        """Create a formatted track table."""
+        """Create a generic table.
+
+        Uses a generator which creates a table framework and allows
+        individual rows to be added with subsequent send calls.
+
+        Args:
+            columns (:obj:`list` of :obj:`str`): a set of values used
+                to head up each column.  This is also used to
+                determine how many values can be passed in to each row
+                without an error occurring
+            title (:obj:`str`, optional): an optional table header.
+                Defaults to None which implies no header is needed.
+            output (:obj:`io`, optional): an IO stream of some sort.
+                Defaults to sys.stdout.
+
+        Raises:
+            IndexError: raised when the number of items in a row does
+                not match the number of columns
+
+        """
 
         if isinstance(columns, (str, int, float)):
             # Ensure that columns are a sequence
