@@ -634,7 +634,20 @@ class CylcVersion:
 
 class Project:
 
-    """Container for project information."""
+    """Class coontains details of each project.
+
+    Class which encapsulates information about a specific project and
+    provides a dicionary-like interface to its parameters.  A project
+    in this context is an fcm repository.
+
+    Args:
+        name (str): project name
+        params (dict): various parameters associated with the project
+        owner (str): the parent JobSources container that owns the
+            instance.  This is used when callbacks to the owning
+            class are needed
+
+    """
 
     fcm_exec = None
 
@@ -680,7 +693,11 @@ class Project:
 
     def get_revisions(self):
 
-        """Get the revision of the project."""
+        """Get the revision of the project.
+
+        Use fcm to get information about the head revision of the
+        project and save this information in the instance.
+        """
 
         for location in ("repo", "parent"):
             url = self[location + " loc"]
@@ -696,7 +713,11 @@ class Project:
 
     def get_links(self):
 
-        """Get the repository links associated with the project."""
+        """Get the repository links associated with the project.
+
+        Get information about the repository SNV paths and store them
+        in the instance.
+        """
 
         # If those attempts to generate links didn't work, try the hope
         # and guess approach.
@@ -728,24 +749,18 @@ class Project:
 
     def get(self, key, default=None):
 
-        """Emulate a proper dictionary."""
+        """Get a value for a keyword or return a default.
+
+        This emulates the behaviour of a dictionary instance by
+        fetching the value associated with a key or a default value.
+
+        Args:
+            key (str): the name of the target resource
+            default ((:obj:`object`, optional): a value to return if
+                the keyword does not exist.  Defaults to None.
+        """
 
         return self.params.get(key, default)
-
-    def __eq__(self, other):
-
-        if isinstance(other, dict):
-            # Compare the internal dictionaries
-            result = True
-            for key, value in self.params.items():
-                result &= other.get(key, None) == value
-
-            for key, value in other.items():
-                result &= self.params.get(key, None) == value
-
-            return result
-
-        raise TypeError("unsupported comparison")
 
     def __setitem__(self, key, value):
 
@@ -760,10 +775,17 @@ class Project:
         return key in self.params
 
     def set_parent(self, mirror_url):
-        """For given URL, on the internal mirror repository, use
-        'fcm branch-info' to try and ascertain the branch parent, if any.
-        Takes fcm_exec path and mirror_url as strings.
-        Returns parent URL or None"""
+
+        """Set the branch parent of the project.
+
+        Uses fcm to locate the parent branch of the project, if any.
+
+        Args:
+            mirror_url (str): the location of the repository.
+
+        Returns:
+            str: the URL of parent branch or None if there is no parent
+        """
 
         parent = None
         stdout = ""
@@ -777,9 +799,15 @@ class Project:
         return parent
 
     def check_repository(self, url):
-        """Checks whether a given repository is accessible or not.
-        Takes fcm_exec path and a url (either SRS or mirror) as strings.
-        Returns True if the repository exists, False otherwise."""
+
+        """Whether a repository is accessible.
+
+        Args:
+            url (str): location of either an SRS or mirror repository
+
+        Returns:
+            bool: True if the repository exists, False otherwise.
+        """
         retcode = 0
         command = [self.fcm_exec, "info", url]
         retcode, _, _ = _run_command(command, ignore_fail=True)
@@ -788,10 +816,19 @@ class Project:
         return False
 
     def convert_to_srs(self, url):
-        """Take a URL as a string, and a dictionary of {project : url, ...}
-        If url is a mirror repository URL in the projects dictionary convert
-        to an SRS URL if also availble.
-        Otherwise return the original URL
+        """Convert a URL to an SRS URL.
+
+        Checks the supplied URL against those in the owning instance
+        and returns an SRS URL.  This is the inverse of
+        convert_to_mirror().
+
+        Args:
+            url (str): location of a repository which might be an
+                internal mirror
+
+        Returns:
+            str: the full SRS URL when a match is found.  Otherwise
+                the original URL is returned unchanged
         """
         if url is None:
             return None
@@ -835,12 +872,22 @@ class Project:
         return srs_url
 
     def convert_to_mirror(self, url):
-        """Take a URL as a string, and a dictionary of {project : url, ...}
-        If url is a shared repository URL in the projects dictionary convert
-        to an internal mirror URL if also available.
-        Otherwise return the original URL
-        Assumes mirror loc of proj with url svn:something/somewhere/project
-        is given as svn:something/somewhere/projectm
+
+        """Convert an SRS URL to a mirror URL.
+
+        Checks the supplied SRS URL against those in the owning
+        instance and returns a mirror URL.  This is the inverse of
+        convert_to_srs().
+
+        This assumes that mirror projects end in 'm'.
+
+        Args:
+            url (str): location of a repository which might be an
+                SRS URL.
+
+        Returns:
+            str: the mirror URL when a match is found.  Otherwise
+                the original URL is returned unchanged
         """
         if url is None:
             return None
@@ -865,10 +912,16 @@ class Project:
         return mirror_url
 
     def convert_to_keyword(self, url):
-        """Takes url and project dictionary.
-        Convert a the URL to a keyword based version, if a keyword exists
-        in the project dictionary provied.
-        Returns None if no keyword is defined.
+        """Convert a URL to fcm keyword-based version.
+
+        Checks the supplied URL against those in the owning instance
+        and converts it into an fcm keyword-style name.
+
+        Args:
+            url (str): location of a repository
+
+        Returns:
+            str: a keyword location or None if no keyword is defined
         """
         if url is None:
             return None
@@ -886,8 +939,17 @@ class Project:
         return keyword_url
 
     def generate_link(self, url):
-        """Given a URL, see if it can be made into a shared repository link.
-        Returns a link as a str or None"""
+
+        """Convert a URL into a Trac wiki format link.
+
+        Converts a subversion URL into a Trac link.
+
+        Args:
+            url (str): location of a repository
+
+        Returns:
+            str: a Trac link or None if the URL cannot be resolved
+        """
         link = None
         if url is not None:
             # Look for a matching part of the URL in the list of projects
@@ -898,10 +960,19 @@ class Project:
         return link
 
     def link_from_loc_layout(self, url, mirror_url):
-        """Attempt to generate a link to a url using a bunch of assumptions
-        we know mostly hold due to working practices at the Met Office.
-        Takes url, mirror url and fcm exec path as strings.
-        Returns Link as string or None"""
+
+        """Convert URL to a link location using a heuristic.
+
+        Converts a URL to a link using assumptions based on working
+        practices at the Met Office.
+
+        Args:
+            url (str): location of the repository
+            mirror_url (str): location of a mirror of the repository
+
+        Returns:
+            str: a link or None if the project could not be found.
+        """
         link = None
         if url is None or mirror_url is None or re.search(r"^file:/", url):
             return None
@@ -940,8 +1011,16 @@ class Project:
         return link
 
     def revision_from_loc_layout(self, mirror_url):
-        """Attempt to recover a revision number using a url to the mirror
-        repository. Also used to translate vn4.3 into 1234"""
+        """Get a revision number from the mirror repository.
+
+        Gets a revision number using a url to the mirror repository.
+
+        Args:
+            mirror_url (str): location of a mirror of the repository
+
+        Returns:
+            str: the revision number or None if not found
+        """
         if mirror_url is None:
             return None
         _, stdout, _ = _run_command([self.fcm_exec, "loc-layout", mirror_url])
@@ -954,12 +1033,19 @@ class Project:
         return revision
 
     def ascertain_ticket_number(self, mirror_url):
-        """Try and work out the ticket number from the Trac log.
-        Takes URL on local (mirror) repository and fcm_exec path.
-        Uses 'fcm log'
-        Relies on commit line starting with '#[0-9]+' - meto working
-        practices for commit says "start with ticket number"
-        Returns ticket number as string or None."""
+
+        """Get ticket number from the Trac log.
+
+        Uses the assumption that fcm log messages follow the working
+        practices and start with a ticket number to match the URL to a
+        Trac ticket.
+
+        Args:
+            mirror_url (str): location of a mirror of the repository
+
+        Returns:
+            str: the trac ticket number or None if not found
+        """
         ticket_number = None
         if re.search("/trunk[/@$]", mirror_url) or re.search(
             r"[fs][cv][mn]:\w+(.xm|.x|)_tr[/@$]", mirror_url
@@ -974,12 +1060,20 @@ class Project:
 
     @staticmethod
     def get_altered_files_list(mirror_loc):
-        """
-        Use the get_branch_diff_filenames function from fcm_bdiff to get a list
-        of files edited on a branch. Remove any entry that doesn't contain a
-        file extension as these are likely directories.
-        """
 
+        """Get a list of files altered by the branch.
+
+        Uses fcm_bdiff.get_branch_diff_filenames to get a list of
+        files edited on a branch.  Entries that do not contain a file
+        extension are assumed to directories and are removed from the
+        list.
+
+        Args:
+            mirror_url (str): location of a mirror of the repository
+
+        Returns:
+            list: a list of strings pointing to files
+        """
         for attempt in range(5):
             # pylint: disable=broad-exception-caught
 
