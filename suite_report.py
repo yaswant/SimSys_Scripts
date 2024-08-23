@@ -1116,7 +1116,11 @@ class Project:
 
 class JobSources:
 
-    """Container for information about all the job sources."""
+    """Container for information about all the job sources.
+
+    Class which encapsulates information about projects and provides
+    simple set of item-like accessor methods to query them.
+    """
 
     def __init__(self):
 
@@ -1144,13 +1148,22 @@ class JobSources:
 
     def source_items(self):
 
-        """Iterate over project and parameter items."""
+        """Iterate over project and parameter items.
+        
+        Yields:
+            tuple: a string containing the project name and a Project
+                instance
+        """
 
         yield from self.job_sources.items()
 
     def add_urls(self, urls):
 
-        """Add a URL dictionary to the instance."""
+        """Add a URL dictionary to the instance.
+
+        Args:
+            urls (dict): a dictionary of URLs
+        """
 
         self.urls = urls.copy()
 
@@ -1174,7 +1187,14 @@ class JobSources:
     @property
     def primary_project(self):
 
-        """The primary project based on the available sources."""
+        """The primary project based on the available sources.
+
+        The name of the primary project based on the heirarchical
+        links between the various different repositories.
+
+        Returns:
+            str: the name of the primary project
+        """
 
         if self._primary_project is None:
             # Set the first time the value is requested
