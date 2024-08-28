@@ -527,9 +527,9 @@ class CylcVersion:
             project = vcs_data["url"]
 
             if project.startswith(self.prefix_mosrs):
-                project = project[len(self.prefix_mosrs) :]
+                project = project[len(self.prefix_mosrs):]
             if project.startswith(self.prefix_svn):
-                project = project[len(self.prefix_svn) :]
+                project = project[len(self.prefix_svn):]
             project = re.split("[/.]", project)[0].upper()
             projects[project] = {}
 
@@ -736,8 +736,7 @@ class Project:
         # Final attempt to ensure the links have revision numbers and not
         # keywords which aren't evaluated in the browser.
         if self["repo link"] is not None and re.search(
-                r"rev=[a-zA-z]", self["repo link"]
-            ):
+                r"rev=[a-zA-z]", self["repo link"]):
             revision = self.revision_from_loc_layout(
                     self["repo mirror"]
             )
@@ -1116,9 +1115,9 @@ class Project:
 
 class JobSources:
 
-    """Container for information about all the job sources.
+    """Class containing information about all the job sources.
 
-    Class which encapsulates information about projects and provides
+    Class which ncapsulates information about projects and provides
     simple set of item-like accessor methods to query them.
     """
 
@@ -1149,7 +1148,7 @@ class JobSources:
     def source_items(self):
 
         """Iterate over project and parameter items.
-        
+
         Yields:
             tuple: a string containing the project name and a Project
                 instance
@@ -1171,7 +1170,6 @@ class JobSources:
 
         """Setup a series of Project instances."""
 
-        # Placeholder name...
         invalid = []
         for project, params in self.source_items():
             item = Project(project, params, self)
@@ -1363,8 +1361,29 @@ class TracFormatter:
 # pylint: disable=too-many-public-methods
 
 class SuiteReport(TracFormatter):
-    """Object to hold data and methods required to produce a suite report
-    from a rose-stem suite output."""
+
+    """Class which produces a suite summary report.
+
+    Class to to hold data and methods required to produce a suite report
+    from a rose-stem suite output.
+
+    Args:
+        suite_path (Path): path to the suite output directory
+
+        log_path ((:obj:`Path`, optional): path to the output
+            directory which should contain the trac.log file.
+            Defaults to None which implies that suite_path should be
+            used.
+
+        verbosity ((:obj:`int`, optional): dictates what tasks are
+            omitted from the log.  Defaults to the value of
+            DEFAULT_VERBOSITY.
+
+        sort_by_name ((:obj:`bool`, optional): force sorting by task
+            name over status when generating the task table in the
+            report.  Defaults to False which implies tasks should be
+            sorted by status and then name.
+    """
 
     def __init__(
         self,
@@ -1373,12 +1392,6 @@ class SuiteReport(TracFormatter):
         verbosity=DEFAULT_VERBOSITY,
         sort_by_name=False,
     ):
-        """Requires a path to the suite output directory.
-        Takes optional arguments for log_path (output dir), and
-        verbosity which dictates what tasks are omitted from the log.
-        also the boolean sort_by_name to force sorting by task name over
-        status when generating the task table in the report.
-        """
         self.suite_path = Path(suite_path).absolute()
 
         self.cylc_version = CylcVersion(self.suite_path)
@@ -1389,7 +1402,7 @@ class SuiteReport(TracFormatter):
         self.host_xcs = False
         self.trustzone = os.environ.get("TRUSTZONE", None)
 
-        self.log_path = log_path
+        self.log_path = Path(log_path) if log_path is not None else self.suite_path
         self.sort_by_name = sort_by_name
         self.verbosity = verbosity
         self.creation_time = time.strftime("%Y/%m/%d %X")
@@ -1464,13 +1477,18 @@ class SuiteReport(TracFormatter):
             )
 
     def parse_processed_config_file(self):
+
         """Parse the suite.rc.processed file.
-        Extract all projects present that begin with a "SOURCE_".
-        Allow SOURCE_<project> to override any SOURCE_<project>_<extension>
-        entries. Creating a dictionary of format {<project> : <URL>,...}
-        Also Extract the host machine rose was launched on.
-        Takes full path for suite dir.
-        Sets class variables"""
+
+        Extracts all projects present that begin with a SOURCE_ and
+        allows them to override any SOURCE_<project>_<extension>
+        entries.  Values are are stored in the job_sources dictionary
+        attribute in the form {<project> : <URL>,...}
+
+        This also extracts the host machine rose was launched on and
+        stores the value in rose_orig_host attribute and updates the
+        multi_branches attribute where there are multiple sources.
+        """
 
         rose_orig_host = "Unknown rose_orig_host"
 
@@ -1520,7 +1538,23 @@ class SuiteReport(TracFormatter):
     @staticmethod
     def unpack_suite_value(value, remove_quotes=True, split_on_comma=False):
 
-        """Unpack a value field from the suite file."""
+        """Unpack a value field from the suite file.
+
+        Takes a value from the suite file, clean up quotes, and unpack
+        it into list if necesary.
+
+        Args:
+            value (str): value to clean up
+            remove_quotes ((:obj:`bool`, optional): whether to remove
+                single and double quotes.  Defaults to True.
+            split_on_comma ((:obj:`bool`, optional): whether to split
+                the entry into a list using commas.  Defaults to False
+                which implies the output should be a string.
+
+        Returns:
+            obj: a cleaned up string if split_on_comma is False or a
+                list of strings if True
+        """
 
         value = value.strip()
         if remove_quotes:
@@ -1534,9 +1568,20 @@ class SuiteReport(TracFormatter):
         return value
 
     def parse_rose_suite_run(self):
+
         """Parse rose-suite-run.conf file.
-        Takes full path for suite dir.
-        Sets class variables"""
+
+        Parses the contents of the config file and extracts a number
+        of keywords and uses them to set various attributes:
+
+        * site gets set to the local site name
+        * groups gets set to a list containing the run_names
+        * fcm, cylc, rose get set to their version number (if any)
+        * host_xcs gets set to true if it matches a group or variable setting
+
+        Finally, require_comparisons gets set if both COMPARE_OUTPUT
+        and COMPARE_WALLCLOCK are set to True in the conf file.
+        """
 
         compare = {}
 
@@ -1575,10 +1620,12 @@ class SuiteReport(TracFormatter):
         self.required_comparisons = all(compare.values())
 
     def initialise_projects(self):
-        """Uses fcm kp to initialise a directory containing project keywords
-        linked to SVN URLS. Format {<project> : <URL>,...}
-        Takes full path for suite dir.
-        Sets class variable"""
+
+        """Initiase projects from FCM keywords.
+
+        Uses the output from fcm kp to initialise the projects
+        attribute with a dictionary containing project names and URLs.
+        """
 
         fcm_exec = FCM[self.site]
 
@@ -1610,14 +1657,24 @@ class SuiteReport(TracFormatter):
         self.projects = projects
 
     def export_file(self, repo_url, fname, outname=None):
-        """
-        Runs an fcm export on a file and saves it as outname
-        Attempts to check it out 5 times to account for any network glitches.
-        Returns None if all attempts fail, otherwise the user expanded path to
-        the file
-        Inputs: repo_url, eg. fcm:um.xm_tr
-                fname: the path of the file in the repo
-                outname: the path to the output file. Default ~/temp.txt
+
+        """Exports a named file from an FCM project.
+
+        Uses fcm to export a file from a project.  Tries up to five
+        times account for any network glitches.
+
+        Args:
+            repo_url (str): FCM repository name of the project,
+                such as fcm:um.xm_tr for the Unified Model
+            fname (str): path to the target file in the repository
+            outname ((:obj:`path`, optional): path to the output file
+                on the local system.  Defaults to None which implies
+                the file should be written to the temporary diretory
+                with a unique temporary name.  Using temporary
+                locations should be sufficient in most cases.
+
+        Returns:
+            Path: the extracted file or None if the export has failed.
         """
 
         if outname is None:
@@ -1640,7 +1697,18 @@ class SuiteReport(TracFormatter):
 
     def get_current_code_owners(self, fname):
 
-        """Get the code/config owners file."""
+        """Get the code/config owners file.
+
+        Attempts to get a current owners file from the head of the
+        repository or, if this fails, it uses the same file from the
+        working copy.
+
+        Args:
+            fname (Path): relative to the owners file
+
+        Returns:
+            Path: path to a copy of the owners file
+        """
 
         # Export the Owners file from the HOT
         file_path = self.export_file("fcm:um.xm_tr", fname)
@@ -1658,12 +1726,17 @@ class SuiteReport(TracFormatter):
         return Path(file_path)
 
     def generate_owner_dictionary(self, mode):
-        """
-        Function that parses an owners file to create a dictionary of owners,
-        mapping a configuration/section to an owner
 
-        Input:
-            mode - either config or code depending on dictionary created
+        """Parser an owners file into a diction.
+
+        Args:
+            mode (str): the type of the configuration being parsed.
+                Valid options are config or code.
+
+        Returns:
+            dict: a dictionary where the keys are section names and
+                the values are tuples containing a string of owners
+                and a string of intersted parties.
         """
 
         if mode == "config":
@@ -1716,12 +1789,20 @@ class SuiteReport(TracFormatter):
         return owners_dict
 
     def create_approval_table(self, needed_approvals, mode, output=sys.stdout):
-        """
-        Function to write out the trac.log table for config and CO approvals
-        Input: needed_approvals - dictionary with keys as owners and values,
-                                  a list of configs or code sections
-               mode - either "config" or "code" depending on
-                      which type of table is being created
+
+        """Build a code or config owners approval table.
+
+        Builds an approvals table using either code owners or
+        configuration owners information and writes it to the output
+        stream.
+
+        Args:
+            needed_approvals (dict): keys should be owners and values
+                should be a list of sections which need approving
+            mode (str): the type of the configuration being generated.
+                Valid options are config or code.
+            output (:obj:`io`, optional): an output stream.  Defaults
+                to sys.stdout if not specified.
         """
 
         if mode == "config":
@@ -1756,13 +1837,23 @@ class SuiteReport(TracFormatter):
         print("", file=output)
 
     def get_config_owners(self, failed_configs, config_owners):
-        """
-         Function that reads through a list of failed rose-ana jobs and records
-         owners for each job thathas failed.
+        """Build a dictionary of required approvers.
 
-        Input:
-                 failed_configs - list of failed rose-ana tasks
-                 config_owners - dictionary mapping config owners to configs
+        Takes a list of failed configurations and a dictionary of
+        configuration owners and uses them to create a dictionary
+        holding details of people who need to approve the change.
+
+        Args:
+            failed_configs (list): a list of strings holding the names
+                of the failed jobs.
+            config_owners (dict): the keys are section names and the
+                values are tuples containing a string of owners and a
+                string of intersted parties.
+
+        Returns:
+            dict: a dictionary where the keys are the names of
+                configuration owners and the values are a set of
+                configuration names.
         """
 
         # Dictionary to store needed approvals
@@ -1799,8 +1890,18 @@ class SuiteReport(TracFormatter):
         return needed_approvals
 
     def required_config_approvals(self, failed_configs, output=sys.stdout):
-        """
-        Calls functions to create a table of required config approvals
+
+        """Create a table of required configuration approvals.
+
+        Gets the configuration owners and uses the list of failed
+        configurations to write a table of required configuration
+        approvals to the output stream.
+
+        Args:
+            failed_configs (list): a list of strings holding the names
+                of the failed jobs.
+            output (:obj:`io`, optional): an output stream.  Defaults
+                to sys.stdout if not specified.
         """
 
         config_owners = self.generate_owner_dictionary("config")
@@ -1818,7 +1919,18 @@ class SuiteReport(TracFormatter):
     @staticmethod
     def lookup_ownership_section(fle):
 
-        """Simple lookup table of ownerships."""
+        """Lookup table of some common ownerships.
+
+        Uses a simple table to look up section ownerships based on
+        filenames.
+
+        Args:
+            fle (str): name of the target file
+
+        Returns:
+            str: the owner of the section or an empty string if the
+                owner is unknown.
+        """
 
         section = ""
 
@@ -1851,7 +1963,18 @@ class SuiteReport(TracFormatter):
 
     def get_file_section_header(self, fpath):
 
-        """Get section ownership from a file header."""
+        """Get section ownership from a file header.
+
+        Checks the header information of the target file for an
+        embedded section identifier.
+
+        Args:
+            fpath (Path): path of the file being queried
+
+        Returns:
+            str: the name of the section or an empty string if not
+                found.
+        """
 
         # Find area of files in other directories
         file_path = self.export_file("fcm:um.xm_tr", fpath)
@@ -1881,9 +2004,21 @@ class SuiteReport(TracFormatter):
         return section
 
     def get_code_owners(self, code_owners):
-        """
-        Function to get required code owner approvals based on fcm_bdiff
-        - code_owners - dict returning code owners for a given code section
+
+        """Get code owners approvals using fcm_bdiff.
+
+        Uses the output of fcm bdiff to identify the files changed and
+        matches this to the code owners for each section.
+
+        Args:
+            code_owners (dict): the keys are section names and the
+                values are tuples containing a string of owners and a
+                string of intersted parties.
+
+        Returns:
+            dict: a dictionary where the keys are the names of
+                code owners and the values are a set of
+                section names.
         """
         # Get list of altered files and exit if no files changed
         # 'UM' used here and just below as this function is
@@ -1992,10 +2127,19 @@ class SuiteReport(TracFormatter):
         return {"files": files, "dirs": dirs}
 
     def get_lfric_interactions(self, extract_list):
-        """
-        Function to count the number of project sources with modified files
-        extracted by lfric. Takes in a dict with keys files and dirs and values
-        are those extracted by lfric
+
+        """Count interactions with LFRic based on an extract list.
+
+        Matches the set of modified files for each project against the
+        list of files extracted by LFRic.  If the number of matches is
+        greater than zero, LFRic testing is probably necessary.
+
+        Args:
+            extract_list (dict): keys are either files or dirs and
+                values are lists of extracted files or directories.
+
+        Returns:
+            int: number of projects which interact with LFRic
         """
 
         num_interactions = 0
@@ -2020,11 +2164,17 @@ class SuiteReport(TracFormatter):
 
         return num_interactions
 
+    # FIXME: change to write directly to the output buffer?
     @staticmethod
     def write_lfric_testing_message(num_interactions):
-        """
-        Based on no. projects with lfric interaction write a message stating
-        lfric testing requirements
+        """Mesage stating LFRic testing requirements.
+
+        Args:
+            num_interactions (int): number of projects which interact
+                with LFRic
+
+        Returns:
+            list: strings containing lines of the output message
         """
 
         message = []
@@ -2232,7 +2382,6 @@ class SuiteReport(TracFormatter):
     # pylint: enable=too-many-statements
     # pylint: enable=too-many-branches
     # pylint: enable=too-many-locals
-
 
     def generate_project_table(self, output=sys.stdout):
         """Returns a trac-formatted table containing the project source
@@ -2484,7 +2633,6 @@ class SuiteReport(TracFormatter):
 
     def print_report(self, trac_log):
         """'Prints a Trac formatted report of the suite_report object"""
-
 
         # pylint: disable=consider-using-f-string
         print("{{{{{{#!div style='background : {0:s}'".format(
