@@ -629,7 +629,11 @@ class CylcVersion:
 
         """Path to the suite scheduler log."""
 
-        path = self.cylc_log / ("suite" if self.version == 7 else "scheduler", "log")
+        if self.version == 7:
+            path = self.cylc_log / "suite"
+        else:
+            path = self.cylc_log / "scheduler" / "log"
+
         return path.absolute()
 
 
@@ -684,7 +688,7 @@ class Project:
             self["parent loc"]
         )
 
-        self["ticket no"] = self.ascertain_ticket_number(
+        self["ticket no"] = self.get_ticket_number(
             self["repo mirror"]
         )
 
@@ -1032,7 +1036,7 @@ class Project:
                 break
         return revision
 
-    def ascertain_ticket_number(self, mirror_url):
+    def get_ticket_number(self, mirror_url):
 
         """Get ticket number from the Trac log.
 
@@ -2264,7 +2268,7 @@ class SuiteReport(TracFormatter):
         self.required_config_approvals(failed_configs, output)
 
     @staticmethod
-    def forced_status_sort(item_tuple):
+    def key_by_forced_status(item_tuple):
         """Get item sort keys in forced order.
 
         If the key is in the DESIRED_ORDER list then return the key's
@@ -2402,7 +2406,7 @@ class SuiteReport(TracFormatter):
         table = self.gen_trac_table(["Status", "No. of Tasks"], output=output)
         table.send(None)
         for status, count in sorted(
-            self.status_counts.items(), key=self.forced_status_sort
+            self.status_counts.items(), key=self.key_by_forced_status
         ):
             table.send([status, count])
         print("", file=output)
