@@ -28,6 +28,7 @@ adding the following to the cylc configuration:
 For interactive use, see the --help information.
 """
 
+# FIXME: consider giving methods consistent names
 # pylint: disable=too-many-lines
 
 import io
@@ -2080,8 +2081,11 @@ class SuiteReport(TracFormatter):
         return needed_approvals
 
     def required_co_approvals(self, output=sys.stdout):
-        """
-        Calls functions to create table of code owner approvals
+        """Create a table of code owner approvals.
+
+        Args:
+            output (:obj:`io`, optional): an output stream.  Defaults
+                to sys.stdout if not specified.
         """
 
         code_owners = self.generate_owner_dictionary("code")
@@ -2199,12 +2203,17 @@ class SuiteReport(TracFormatter):
         return message
 
     def check_lfric_extract_list(self, output=sys.stdout):
-        """
-        Determine whether any files modified in source branches are
-        extracted by lfric.
+        """Check whether modified files are extracted by LFRic apps.
 
-        Return a trac formatted string stating whether LFRic testing
-        is required
+        Gets the LFRic apps export list and checks against changes in
+        the source branches to get a count of the number of projects
+        that have file changes that overlap with LFRic.  Finally, add
+        a message to the output stream indicating whether LFRic
+        testing is likely to be needed.
+
+        Args:
+            output (:obj:`io`, optional): an output stream.  Defaults
+                to sys.stdout if not specified.
         """
 
         print("'''LFRic Testing Requirements'''\n", file=output)
@@ -2241,8 +2250,14 @@ class SuiteReport(TracFormatter):
 
         """Generate config/code owners table for the UM.
 
-        Generate table for required config and code owners.  Only run
-        if a UM suite
+        Adds the config owners and code owners tables to the output stream
+        if the run is a UM suite.
+
+        Args:
+            failed_configs (list): a list of strings holding the names
+                of the failed jobs.
+            output (:obj:`io`, optional): an output stream.  Defaults
+                to sys.stdout if not specified.
         """
 
         self.required_co_approvals(output)
@@ -2250,26 +2265,41 @@ class SuiteReport(TracFormatter):
 
     @staticmethod
     def forced_status_sort(item_tuple):
-        """A key generating function for use by sorted.
-        item_tuple is a tuple of the ("key", "value") pair from a
-        dictionary.
-        If the 'key' is in the DESIRED_ORDER list then return the key's
-        index from that list, otherwise return the key.
-        This forces the items in the DESIRED order list to be listed
-        first, in the order they appear in the list, followed by all the
-        other keys.
-        caveat, it relies on numbers preceeding alphabetic characters
-        and all the status keys starting with a letter."""
+        """Get item sort keys in forced order.
+
+        If the key is in the DESIRED_ORDER list then return the key's
+        index from that list, otherwise return the key.  This forces
+        the items in the DESIRED order list to be listed first, in the
+        order they appear in the list, followed by all the other keys.
+
+        Caveat: it relies on numbers preceeding alphabetic characters
+        and all the status keys starting with a letter.
+
+        Args:
+            item_tuple (tuple): key and value pair from a dictionary
+
+        Returns:
+            str: the sort order
+        """
         key = item_tuple[0]
         if key in DESIRED_ORDER:
             return str(DESIRED_ORDER.index(key))
         return key
 
     def key_by_name_or_status(self, task_item):
-        """A key generating function for use by sorted.
-        task_item is a tuple of (name, status).
-        If sorting by name, return a tuple of (name, status),
-        otherwise return (status, name) for use as the sorting key"""
+        """Get name or status sort key.
+
+        Given a tuple containing a task name and its status, return
+        the tuple in its original form if sort_by_name is True
+        otherwise return the tuple in (status, name) form.
+
+        Args:
+           task_item (tuple): the name and the status of a task
+
+        Returns:
+           tuple: either (name, status) or (status, name) depending
+               on instance attributes
+        """
         if self.sort_by_name:
             return task_item
         return (task_item[1], task_item[0])
@@ -2279,17 +2309,27 @@ class SuiteReport(TracFormatter):
     # pylint: disable=too-many-locals
 
     def generate_task_table(self, data, output=sys.stdout):
-        """Returns a trac-formatted table of the tasks run in this suite.
-        Tasks are provided in a dictionary of format {"task" : "status",...}
-        verbosity (int) sets verbosity level. In practice, as the number
-        increases, verbosity decreases, and the range of tasks hidden from
-        the report increases.
-        sort_by_name (bool) sorts by task name when true, otherwise sorting
-        is done by status.
-        Potentially 2 summary tables are also produced. One details the
-        number of tasks found with each status type. The 2nd is only present
-        if not empty and indicates how many tasks of the relevant types have
-        been hidden"""
+        """Create a task table for the suite.
+
+        Convert a task dictionary into a table and add it to an output
+        buffer, with output levels controlled by the instance
+        verbosity attribute.  As this increases, the amount of output
+        decreases as more tasks are hidden.
+
+        The sort_by_name attribute determines whether tasks are sorted
+        by name or status.
+
+        Output may include two tables.  One details the number of
+        tasks with each status type and the other only appears if it
+        is not empty and how many tasks of the relevant types have
+        been hidden.
+
+        Args:
+           data (dict): task states where they keys are the task names
+                and the values are states as strings
+           output (:obj:`io`, optional): an IO stream of some sort.
+                Defaults to sys.stdout
+        """
 
         hidden_counts = defaultdict(int)
 
@@ -2384,10 +2424,16 @@ class SuiteReport(TracFormatter):
     # pylint: enable=too-many-locals
 
     def generate_project_table(self, output=sys.stdout):
-        """Returns a trac-formatted table containing the project source
-        trees used in this suite.
-        Method of SuiteReport object.
-        Returns list of trac formatted table rows."""
+        """Create a project summary table for the suite.
+
+        Creates a table which contains a line for each project,
+        indicating where the project source came from and what
+        modifications have been applied to it.
+
+        Args:
+           output (:obj:`io`, optional): an IO stream of some sort.
+                Defaults to sys.stdout
+        """
 
         table = self.gen_trac_table(["Project", "Tested Source Tree",
                                      "Repository Location", "Branch Parent",
@@ -2432,9 +2478,18 @@ class SuiteReport(TracFormatter):
             row.append(self.gen_text_element([wc_text], wc_link, bold=True))
             table.send(row)
 
-    def gen_resources_table(self, output):
-        """Loops over the RESOURCE_MONITORING_JOBS and returns a
-        trac-formatted table of resources used by those jobs in this suite."""
+    def gen_resources_table(self, output=sys.stdout):
+
+        """Create a table of resource monitoring jobs.
+
+        Locates the jobs in RESOURCE_MONITORING_JOBS and returns a
+        trac-formatted table of resources used by those jobs in this
+        suite.
+
+        Args:
+            output (:obj:`io`, optional): an IO stream of some sort.
+                Defaults to sys.stdout
+        """
 
         print("", file=output)
 
@@ -2462,8 +2517,24 @@ class SuiteReport(TracFormatter):
 
     @staticmethod
     def get_wallclock_and_memory(filename):
-        """Given an output filename read and parse for the wallclock
-        and memory."""
+
+        """Parse wallclock and memory usage from job output.
+
+        Given an output filename read and parse for the wallclock and
+        memory.  The elapsed time is in seconds and the memory figure
+        is in kilobytes (decimal magnitudes).
+
+        Note: this assumes that the job output includes information
+        generated by the Met Office end-of-job reporting tool.
+
+        Args:
+            filename (Path): path to the output of a batch job
+
+        Returns:
+            tuple: the elapsed time of the application as an integer
+                and the amount of memory used in KB.
+        """
+
         wallclock = "Unavailable"
         memory = "Unavailable"
         find_wallclock = re.compile(
@@ -2499,20 +2570,17 @@ class SuiteReport(TracFormatter):
         return wallclock, memory
 
     @staticmethod
-    def query_database(suite_db_file):
-        """Query the database and return a dictionary of states."""
-        database = sqlite3.connect(suite_db_file)
-        cursor = database.cursor()
-        cursor.execute("select name, status from task_states;")
-        data = {}
-        for row in cursor:
-            data[row[0]] = row[1]
-        database.close()
-        return data
-
-    @staticmethod
     def generate_groups(grouplist):
-        """Convert the list of groups run into a trac-formatted string."""
+        """Convert the groups run into a Trac formatted string.
+
+        Args:
+            grouplist (list): strings containing the names of the
+                groups used to run the test suite.
+
+        Returns:
+            str: groups separate by Trac line breaks
+        """
+
         output = ""
         for group in grouplist[:-1]:
             output += f"{_remove_quotes(group)} [[br]]"
@@ -2521,7 +2589,11 @@ class SuiteReport(TracFormatter):
 
     def get_project_tickets(self):
 
-        """Get all tickets associated with each project."""
+        """Get all tickets associated with each project.
+
+        Returns:
+            str: space separated details of each ticket
+        """
 
         ticket_nos = ""
 
@@ -2533,13 +2605,23 @@ class SuiteReport(TracFormatter):
 
         return ticket_nos
 
-    def report_uncommited_changes(self, trac_log):
+    def report_uncommited_changes(self, output=sys.stdout):
 
-        """Repoort on any uncommitted changes."""
+        """Report on any uncommitted changes.
 
-        print("\n", file=trac_log)
-        print("-----", file=trac_log)
-        print(" = WARNING !!! = ", file=trac_log)
+        Uses the value of the uncommitted_changes attribute to
+        determine whether to add a warning about the validity of the
+        testing.  Unless all changes are committed, the working copy
+        may pass testing but the branch may be broken.
+
+        Args:
+            output (:obj:`io`, optional): an IO stream of some sort.
+                Defaults to sys.stdout
+        """
+
+        print("\n", file=output)
+        print("-----", file=output)
+        print(" = WARNING !!! = ", file=output)
         if self.uncommitted_changes > 1:
             word = "changes"
         else:
@@ -2549,54 +2631,69 @@ class SuiteReport(TracFormatter):
                 + f"{self.uncommitted_changes} uncommitted"
                 + f" project {word} and is therefore "
                 + "'''not valid''' for review",
-                file=trac_log)
-            print("-----", file=trac_log)
-            print("", file=trac_log)
+                file=output)
+            print("-----", file=output)
+            print("", file=output)
 
         if (
             not self.required_comparisons
             and "LFRIC_APPS" not in self.job_sources
         ):
-            print("", file=trac_log)
-            print("-----", file=trac_log)
-            print(" = WARNING !!! = ", file=trac_log)
+            print("", file=output)
+            print("-----", file=output)
+            print(" = WARNING !!! = ", file=output)
             print(
                 "This rose-stem suite did not run the "
                 + "required comparisons (COMPARE_OUTPUT "
                 + "and/or COMPARE_WALLCLOCK are not true) "
                 + "and is therefore '''not valid''' for "
-                + "review", file=trac_log
+                + "review", file=output
             )
-            print("-----", file=trac_log)
-            print("", file=trac_log)
+            print("-----", file=output)
+            print("", file=output)
 
-    def report_multi_branches(self, trac_log):
+    def report_multi_branches(self, output=sys.stdout):
 
-        """Report on the use of multiple branches."""
+        """Report on the use of multiple branches.
 
-        print("", file=trac_log)
-        print("-----", file=trac_log)
-        print(" = WARNING !!! = ", file=trac_log)
+        Args:
+            output (:obj:`io`, optional): an IO stream of some sort.
+                Defaults to sys.stdout
+        """
+
+        print("", file=output)
+        print("-----", file=output)
+        print(" = WARNING !!! = ", file=output)
 
         print(
             "This rose-stem suite included multiple "
             + "branches in {len(self.multi_branches)} projects:",
-            file=trac_log
+            file=output
         )
-        print("", file=trac_log)
+        print("", file=output)
 
         for project, branch_names in self.multi_branches.items():
-            print(f"'''{project}'''", file=trac_log)
+            print(f"'''{project}'''", file=output)
             for branch_name in "".join(branch_names).split():
-                print(f" * {branch_name}", file=trac_log)
+                print(f" * {branch_name}", file=output)
 
-        print("", file=trac_log)
-        print("-----", file=trac_log)
-        print("", file=trac_log)
+        print("", file=output)
+        print("-----", file=output)
+        print("", file=output)
 
-    def gen_report_header(self, output):
+    def gen_report_header(self, output=sys.stdout):
 
-        """Add a header summary table to the report."""
+        """Add a header summary table to the report.
+
+        Creates a table which contains key details about the suite
+        including the various options and platform details used for
+        testing and outputs it the buffer.  Items are not added to
+        table if their value is empty.
+
+        Args:
+            output (:obj:`io`, optional): an IO stream of some sort.
+                Defaults to sys.stdout
+        """
 
         ticket_nos = self.get_project_tickets()
 
@@ -2631,42 +2728,64 @@ class SuiteReport(TracFormatter):
         header.send(["''ROSE_ORIG_HOST''", self.rose_orig_host])
         header.send(["HOST_XCS", self.host_xcs])
 
-    def print_report(self, trac_log):
-        """'Prints a Trac formatted report of the suite_report object"""
+    def print_report(self, output):
+
+        """Print a formatted reort of the suite_report object.
+
+        Generates the complete suite report by calling each of the
+        reporting methods in order.  Each of these adds its own
+        section to the output buffer to assemble the final report.
+
+        Args:
+            output (:obj:`io`, optional): an IO stream of some sort.
+                Defaults to sys.stdout
+        """
 
         # pylint: disable=consider-using-f-string
         print("{{{{{{#!div style='background : {0:s}'".format(
             BACKGROUND_COLOURS[self.primary_project.lower()]),
-              file=trac_log)
+              file=output)
         # pylint: enable=consider-using-f-string
 
         # Add the summary header
-        self.gen_report_header(trac_log)
-        print("", file=trac_log)
+        self.gen_report_header(output)
+        print("", file=output)
 
         if self.uncommitted_changes:
-            self.report_uncommited_changes(trac_log)
+            self.report_uncommited_changes(output)
 
         if self.multi_branches:
-            self.report_multi_branches(trac_log)
+            self.report_multi_branches(output)
 
-        self.generate_project_table(output=trac_log)
-        print("", file=trac_log)
+        self.generate_project_table(output=output)
+        print("", file=output)
 
         # Check whether lfric shared files have been touched
         # Not needed if lfric the suite source
         if ("LFRIC" not in self.primary_project
             and self.primary_project != "UNKNOWN"):
-            self.check_lfric_extract_list(trac_log)
+            self.check_lfric_extract_list(output)
 
         data = self.cylc_version.task_states()
 
-        self.generate_task_table(data, output=trac_log)
-        print("}}}", file=trac_log)
+        self.generate_task_table(data, output=output)
+        print("}}}", file=output)
 
     def write_final_report(self, trac_log):
 
-        """Write the report to a file or to stdout."""
+        """Write the buffered final report.
+
+        Takes the contents of a buffered IO instance and writes it out
+        to TRAC_LOG_FILE.  If an IOError occurs while writing to the
+        output file, an error message and the contents of the buffer
+        are printed to the stdout stream, ensuring the user always
+        gets something.
+
+        Args:
+            output (io): the IO buffer stream, typically an
+                io.StringIO instance used to buffer the
+                report ready for printing
+        """
 
         trac_log_path = (self.log_path
                          if self.log_path else
@@ -2701,14 +2820,19 @@ class SuiteReport(TracFormatter):
 
 
 def get_working_copy_path(path):
+
+    """Get a working copy from a location.
+
+    Args:
+        path (str): location of the working copy.  The value provided
+            by the script contains the hostname in the format
+            <hostname>:<path>.  Python seems unable to parse this
+            hence the code below.
+
+    Returns:
+        Path: the working copy or None if one could not be found
     """
-    Function that tries to find a working copy given a path to that copy.
-    Input:
-        - path: Path to a working copy. The path provided in this script
-                contains the hostname in the format <hostname>:<path>.
-                Python seems unable to parse this hence the code below.
-    """
-    working = Path()
+    working = Path(path)
 
     if working.exists():
         return working
@@ -2723,7 +2847,21 @@ def get_working_copy_path(path):
 
 def directory_type(opt):
 
-    """Check location exists and is a directory."""
+    """Check location exists and is a directory.
+
+    Args:
+        opt (str): option value from ArgumentParser
+
+    Returns:
+        Path: the absolute location of the diretory with the name
+            fully resolved and all symbolic links dereferenced
+
+    Raises:
+        ArgumentTypeError: if the value does not refer to an existing
+            directory or if it exists but is not a directory.  This
+            type of exception is handled by ArgumentParser and generates
+            a meaningful error message.
+    """
 
     opt = Path(opt)
 
@@ -2739,7 +2877,12 @@ def directory_type(opt):
 
 def parse_arguments():
 
-    """Process command line arguments."""
+    """Process command line arguments.
+
+    Returns:
+        Namespace: an instance containing the switches and options
+            passed to the script on the command line.
+    """
 
     suite_path = os.environ.get(
         # Cylc7 environment variable
