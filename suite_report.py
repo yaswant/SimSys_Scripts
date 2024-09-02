@@ -675,7 +675,7 @@ class Project:
             # Skip further actions
             return
 
-        self["parent mirror"] = self.set_parent(self["repo mirror"])
+        self["parent mirror"] = self.get_parent(self["repo mirror"])
         self["parent loc"] = self.convert_to_srs(self["parent mirror"])
 
         self.get_revisions()
@@ -726,15 +726,15 @@ class Project:
 
         # If those attempts to generate links didn't work, try the hope
         # and guess approach.
-        self["repo link"] = self.generate_link(self["repo loc"])
+        self["repo link"] = self.convert_to_link(self["repo loc"])
         if self["repo link"] is None:
-            self["repo link"] = self.link_from_loc_layout(
+            self["repo link"] = self.convert_link_from_layout(
                     self["repo link"], self["repo mirror"]
                 )
 
-        self["parent link"] = self.generate_link(self["parent loc"])
+        self["parent link"] = self.convert_to_link(self["parent loc"])
         if self["parent link"] is None:
-            self["parent link"] = self.link_from_loc_layout(
+            self["parent link"] = self.convert_link_from_layout(
                     self["parent loc"],
                     self["parent mirror"],
                 )
@@ -742,7 +742,7 @@ class Project:
         # keywords which aren't evaluated in the browser.
         if self["repo link"] is not None and re.search(
                 r"rev=[a-zA-z]", self["repo link"]):
-            revision = self.revision_from_loc_layout(
+            revision = self.get_revision_from_layout(
                     self["repo mirror"]
             )
             self["repo link"] = re.sub(
@@ -778,9 +778,9 @@ class Project:
 
         return key in self.params
 
-    def set_parent(self, mirror_url):
+    def get_parent(self, mirror_url):
 
-        """Set the branch parent of the project.
+        """Get the branch parent of the project.
 
         Uses fcm to locate the parent branch of the project, if any.
 
@@ -942,7 +942,7 @@ class Project:
                 break
         return keyword_url
 
-    def generate_link(self, url):
+    def convert_to_link(self, url):
 
         """Convert a URL into a Trac wiki format link.
 
@@ -963,7 +963,7 @@ class Project:
                     break
         return link
 
-    def link_from_loc_layout(self, url, mirror_url):
+    def convert_link_from_layout(self, url, mirror_url):
 
         """Convert URL to a link location using a heuristic.
 
@@ -1014,7 +1014,7 @@ class Project:
                     link = url
         return link
 
-    def revision_from_loc_layout(self, mirror_url):
+    def get_revision_from_layout(self, mirror_url):
         """Get a revision number from the mirror repository.
 
         Gets a revision number using a url to the mirror repository.
@@ -1230,7 +1230,7 @@ class TracFormatter:
     """
 
     @staticmethod
-    def gen_trac_header(title=None, output=sys.stdout):
+    def format_trac_header(title=None, output=sys.stdout):
 
         """Create a tabulated report header.
 
@@ -1262,7 +1262,7 @@ class TracFormatter:
             print(f" || {row[0]}: || {row[1]} || ", file=output)
 
     @staticmethod
-    def gen_text_element(text_list, link, bold=False):
+    def format_trac_text(text_list, link, bold=False):
 
         """Generate a Trac format text element.
 
@@ -1298,7 +1298,7 @@ class TracFormatter:
         return element
 
     @staticmethod
-    def gen_trac_table(columns, title=None, preamble=None, output=sys.stdout):
+    def format_trac_table(columns, title=None, preamble=None, output=sys.stdout):
 
         """Create a generic table.
 
@@ -1815,7 +1815,7 @@ class SuiteReport(TracFormatter):
         else:
             columns = ["Owner (Deputy)", "Approval", "Code Section"]
 
-        table = self.gen_trac_table(
+        table = self.format_trac_table(
             columns=columns,
             title="Required " + mode.capitalize() + " Owner Approvals",
             output=output)
@@ -2245,6 +2245,7 @@ class SuiteReport(TracFormatter):
                   file=output)
             return
 
+        # FIXME: extract_list_dict is initialised in a conditional
         num_interactions = self.get_lfric_interactions(extract_list_dict)
 
         print("\n".join(self.write_lfric_testing_message(num_interactions)),
@@ -2340,7 +2341,7 @@ class SuiteReport(TracFormatter):
         # Write the task table to a different buffer and add it to the
         # output buffer after the summary table.
         task_table = io.StringIO()
-        table = self.gen_trac_table(["Task", "State"], output=task_table)
+        table = self.format_trac_table(["Task", "State"], output=task_table)
         table.send(None)
 
         hidden = True
@@ -2403,7 +2404,7 @@ class SuiteReport(TracFormatter):
 
         print("\n |||| '''All Tasks''' || ", file=output)
 
-        table = self.gen_trac_table(["Status", "No. of Tasks"], output=output)
+        table = self.format_trac_table(["Status", "No. of Tasks"], output=output)
         table.send(None)
         for status, count in sorted(
             self.status_counts.items(), key=self.key_by_forced_status
@@ -2414,7 +2415,7 @@ class SuiteReport(TracFormatter):
         if len(hidden_counts) > 0:
             print(" |||| '''Hidden Tasks''' || ", file=output)
 
-            table = self.gen_trac_table(["Type", "No. of Tasks Hidden"], output=output)
+            table = self.format_trac_table(["Type", "No. of Tasks Hidden"], output=output)
             table.send(None)
             for task_type, count in hidden_counts.items():
                 table.send([task_type, count])
@@ -2439,7 +2440,7 @@ class SuiteReport(TracFormatter):
                 Defaults to sys.stdout
         """
 
-        table = self.gen_trac_table(["Project", "Tested Source Tree",
+        table = self.format_trac_table(["Project", "Tested Source Tree",
                                      "Repository Location", "Branch Parent",
                                      "Ticket number", "Uncommitted Changes"],
                                     output=output)
@@ -2447,12 +2448,12 @@ class SuiteReport(TracFormatter):
 
         for project, proj_dict in sorted(self.job_sources, key=lambda x: x[0]):
             row = [project,
-                   self.gen_text_element([proj_dict["tested source"]], None),
-                   self.gen_text_element(
+                   self.format_trac_text([proj_dict["tested source"]], None),
+                   self.format_trac_text(
                        [proj_dict["human repo loc"], proj_dict["repo loc"]],
                        proj_dict["repo link"],
                    ),
-                   self.gen_text_element(
+                   self.format_trac_text(
                        [proj_dict["human parent"], proj_dict["parent loc"]],
                        proj_dict["parent link"],
                    )]
@@ -2463,7 +2464,7 @@ class SuiteReport(TracFormatter):
                 ]
             else:
                 project_ticket_link = [None]
-            row.append(self.gen_text_element(project_ticket_link, None))
+            row.append(self.format_trac_text(project_ticket_link, None))
 
             wc_link = None
             wc_text = None
@@ -2479,7 +2480,7 @@ class SuiteReport(TracFormatter):
                         proj_dict["version file"],
                     )
                     # pylint: enable=consider-using-f-string
-            row.append(self.gen_text_element([wc_text], wc_link, bold=True))
+            row.append(self.format_trac_text([wc_text], wc_link, bold=True))
             table.send(row)
 
     def gen_resources_table(self, output=sys.stdout):
@@ -2506,7 +2507,7 @@ class SuiteReport(TracFormatter):
                 wallclock, memory = self.get_wallclock_and_memory(filename)
                 if wallclock and memory:
                     if found_nothing:
-                        table = self.gen_trac_table(["Task", "Wallclock",
+                        table = self.format_trac_table(["Task", "Wallclock",
                                                      "Total Memory"],
                                                     preamble=[None, "Resource Monitoring Task"],
                                                     output=output)
@@ -2685,7 +2686,7 @@ class SuiteReport(TracFormatter):
         print("-----", file=output)
         print("", file=output)
 
-    def gen_report_header(self, output=sys.stdout):
+    def report_header(self, output=sys.stdout):
 
         """Add a header summary table to the report.
 
@@ -2706,7 +2707,7 @@ class SuiteReport(TracFormatter):
             title = f"Ticket {ticket_nos} "
         title += "Testing Results - rose-stem output"
 
-        header = self.gen_trac_header(title, output)
+        header = self.format_trac_header(title, output)
         header.send(None)
 
         header.send(["Suite Name", self.suitename])
@@ -2752,7 +2753,7 @@ class SuiteReport(TracFormatter):
         # pylint: enable=consider-using-f-string
 
         # Add the summary header
-        self.gen_report_header(output)
+        self.report_header(output)
         print("", file=output)
 
         if self.uncommitted_changes:
