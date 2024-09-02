@@ -1363,7 +1363,6 @@ class TracFormatter:
 
 
 # pylint: disable=too-many-instance-attributes
-# pylint: disable=too-many-public-methods
 
 class SuiteReport(TracFormatter):
 
@@ -1452,9 +1451,9 @@ class SuiteReport(TracFormatter):
             os.path.basename(suite_dir.rstrip("/"))
         )
 
-        self.parse_rose_suite_run()
-        self.initialise_projects()
-        self.parse_processed_config_file()
+        self._parse_rose_suite_run()
+        self._initialise_projects()
+        self._parse_processed_config_file()
         details, self.uncommited_changes = self.cylc_version.project_details()
         self.job_sources += details
         self.job_sources.add_urls(self.projects)
@@ -1481,7 +1480,7 @@ class SuiteReport(TracFormatter):
                     for group in self.groups
             )
 
-    def parse_processed_config_file(self):
+    def _parse_processed_config_file(self):
 
         """Parse the suite.rc.processed file.
 
@@ -1541,7 +1540,7 @@ class SuiteReport(TracFormatter):
         self.multi_branches = multiple_branches
 
     @staticmethod
-    def unpack_suite_value(value, remove_quotes=True, split_on_comma=False):
+    def _unpack_suite_value(value, remove_quotes=True, split_on_comma=False):
 
         """Unpack a value field from the suite file.
 
@@ -1572,7 +1571,7 @@ class SuiteReport(TracFormatter):
 
         return value
 
-    def parse_rose_suite_run(self):
+    def _parse_rose_suite_run(self):
 
         """Parse rose-suite-run.conf file.
 
@@ -1599,14 +1598,14 @@ class SuiteReport(TracFormatter):
                 key, value = line.strip().split("=", 1)
 
                 if key == "SITE":
-                    self.site = self.unpack_suite_value(value)
+                    self.site = self._unpack_suite_value(value)
 
                 elif key == "RUN_NAMES":
-                    self.groups = self.unpack_suite_value(value, False, True)
+                    self.groups = self._unpack_suite_value(value, False, True)
 
                 elif key in ("FCM_VERSION", "CYLC_VERSION", "ROSE_VERSION"):
                     target = key.lower().split("_")[0]
-                    value = self.unpack_suite_value(value)
+                    value = self._unpack_suite_value(value)
                     if value != "":
                         setattr(self, target, value)
 
@@ -1624,7 +1623,7 @@ class SuiteReport(TracFormatter):
         # been added to rose-suite.conf for now
         self.required_comparisons = all(compare.values())
 
-    def initialise_projects(self):
+    def _initialise_projects(self):
 
         """Initiase projects from FCM keywords.
 
@@ -1661,7 +1660,7 @@ class SuiteReport(TracFormatter):
                     projects[project] = url
         self.projects = projects
 
-    def export_file(self, repo_url, fname, outname=None):
+    def _export_file(self, repo_url, fname, outname=None):
 
         """Exports a named file from an FCM project.
 
@@ -1700,7 +1699,7 @@ class SuiteReport(TracFormatter):
 
         return None
 
-    def get_current_code_owners(self, fname):
+    def _get_current_code_owners(self, fname):
 
         """Get the code/config owners file.
 
@@ -1716,7 +1715,7 @@ class SuiteReport(TracFormatter):
         """
 
         # Export the Owners file from the HOT
-        file_path = self.export_file("fcm:um.xm_tr", fname)
+        file_path = self._export_file("fcm:um.xm_tr", fname)
         if file_path is None:
             # Couldn't check out file - use working copy Owners file instead
             wc_path = get_working_copy_path(
@@ -1730,7 +1729,7 @@ class SuiteReport(TracFormatter):
 
         return Path(file_path)
 
-    def generate_owner_dictionary(self, mode):
+    def _get_owner_dictionary(self, mode):
 
         """Parser an owners file into a diction.
 
@@ -1754,7 +1753,7 @@ class SuiteReport(TracFormatter):
             return None
 
         # Get a current version of the owners file
-        file_path = self.get_current_code_owners(fname)
+        file_path = self._get_current_code_owners(fname)
 
         # Read through file and generate dictionary
         try:
@@ -1793,7 +1792,7 @@ class SuiteReport(TracFormatter):
 
         return owners_dict
 
-    def create_approval_table(self, needed_approvals, mode, output=sys.stdout):
+    def add_approval_table(self, needed_approvals, mode, output=sys.stdout):
 
         """Build a code or config owners approval table.
 
@@ -1841,7 +1840,7 @@ class SuiteReport(TracFormatter):
         # Always add a trailing newline
         print("", file=output)
 
-    def get_config_owners(self, failed_configs, config_owners):
+    def _get_config_owners(self, failed_configs, config_owners):
         """Build a dictionary of required approvers.
 
         Takes a list of failed configurations and a dictionary of
@@ -1894,7 +1893,7 @@ class SuiteReport(TracFormatter):
 
         return needed_approvals
 
-    def required_config_approvals(self, failed_configs, output=sys.stdout):
+    def add_config_approvals(self, failed_configs, output=sys.stdout):
 
         """Create a table of required configuration approvals.
 
@@ -1909,22 +1908,22 @@ class SuiteReport(TracFormatter):
                 to sys.stdout if not specified.
         """
 
-        config_owners = self.generate_owner_dictionary("config")
+        config_owners = self._get_owner_dictionary("config")
         if config_owners is None:
             return
 
-        config_approvals = self.get_config_owners(failed_configs,
+        config_approvals = self._get_config_owners(failed_configs,
                                                   config_owners)
 
         if len(config_approvals.keys()) == 0:
             config_approvals = None
 
-        self.create_approval_table(config_approvals, "config", output)
+        self.add_approval_table(config_approvals, "config", output)
 
     @staticmethod
-    def lookup_ownership_section(fle):
+    def _get_ownership_section(fle):
 
-        """Lookup table of some common ownerships.
+        """Get some common ownerships from a lookup table.
 
         Uses a simple table to look up section ownerships based on
         filenames.
@@ -1966,7 +1965,7 @@ class SuiteReport(TracFormatter):
         # Unidentified section
         return section
 
-    def get_file_section_header(self, fpath):
+    def _get_file_section_header(self, fpath):
 
         """Get section ownership from a file header.
 
@@ -1982,7 +1981,7 @@ class SuiteReport(TracFormatter):
         """
 
         # Find area of files in other directories
-        file_path = self.export_file("fcm:um.xm_tr", fpath)
+        file_path = self._export_file("fcm:um.xm_tr", fpath)
         if file_path is None:
             return ""
 
@@ -2008,7 +2007,7 @@ class SuiteReport(TracFormatter):
 
         return section
 
-    def get_code_owners(self, code_owners):
+    def _get_code_owners(self, code_owners):
 
         """Get code owners approvals using fcm_bdiff.
 
@@ -2064,11 +2063,11 @@ class SuiteReport(TracFormatter):
                 needed_approvals["!umsysteam@metoffice.gov.uk"].add("bin")
                 continue
 
-            section = self.lookup_ownership_section(fle)
+            section = self._get_ownership_section(fle)
 
             if section == "":
                 # Find area of files in other directories
-                section = self.get_file_section_header(fpath)
+                section = self._get_file_section_header(fpath)
 
             # Compare area name to code owners list
             try:
@@ -2084,7 +2083,7 @@ class SuiteReport(TracFormatter):
 
         return needed_approvals
 
-    def required_co_approvals(self, output=sys.stdout):
+    def add_code_owner_approvals(self, output=sys.stdout):
         """Create a table of code owner approvals.
 
         Args:
@@ -2092,24 +2091,31 @@ class SuiteReport(TracFormatter):
                 to sys.stdout if not specified.
         """
 
-        code_owners = self.generate_owner_dictionary("code")
+        code_owners = self._get_owner_dictionary("code")
         if code_owners is None:
             return
 
-        code_approvals = self.get_code_owners(code_owners)
+        code_approvals = self._get_code_owners(code_owners)
         if code_approvals is False:
             return
 
-        self.create_approval_table(code_approvals, "code", output)
+        self.add_approval_table(code_approvals, "code", output)
 
     @staticmethod
-    def parse_lfric_extract_list(fpath="~/temp.txt"):
-        """
+    def _get_lfric_extract_list(fpath="~/temp.txt"):
+        """Get the extracted list of LFric files and directories.
+
         Read through the lfric_extract list and get a list of files and dirs.
-        Return a dictionary with keys 'files' and 'dirs'
+
+        Args:
+            fpath (:obj:`str`, optional): an output stream.  Defaults
+                to ~/temp.txt if not specified.
+
+        Returns:
+            dict: dictionary with keys 'files' and 'dirs'
         """
 
-        fpath = Path(fpath)
+        fpath = Path(fpath).expanduser()
 
         files = []
         dirs = []
@@ -2134,7 +2140,7 @@ class SuiteReport(TracFormatter):
 
         return {"files": files, "dirs": dirs}
 
-    def get_lfric_interactions(self, extract_list):
+    def _get_lfric_interactions(self, extract_list):
 
         """Count interactions with LFRic based on an extract list.
 
@@ -2174,7 +2180,7 @@ class SuiteReport(TracFormatter):
 
     # FIXME: change to write directly to the output buffer?
     @staticmethod
-    def write_lfric_testing_message(num_interactions):
+    def _lfric_testing_message(num_interactions):
         """Mesage stating LFRic testing requirements.
 
         Args:
@@ -2206,7 +2212,7 @@ class SuiteReport(TracFormatter):
         message.append("")
         return message
 
-    def check_lfric_extract_list(self, output=sys.stdout):
+    def _check_lfric_extract_list(self, output=sys.stdout):
         """Check whether modified files are extracted by LFRic apps.
 
         Gets the LFRic apps export list and checks against changes in
@@ -2223,7 +2229,7 @@ class SuiteReport(TracFormatter):
         print("'''LFRic Testing Requirements'''\n", file=output)
 
         # Export the extract list from the lfric trunk
-        extract_list_path = self.export_file(
+        extract_list_path = self._export_file(
             "fcm:lfric_apps.xm_tr",
             "build/extract/extract.cfg",
         )
@@ -2231,7 +2237,7 @@ class SuiteReport(TracFormatter):
 
         if extract_list_path:
             try:
-                extract_list_dict = self.parse_lfric_extract_list(
+                extract_list_dict = self._get_lfric_extract_list(
                     extract_list_path
                 )
             except (EnvironmentError, TypeError, AttributeError):
@@ -2246,12 +2252,13 @@ class SuiteReport(TracFormatter):
                   file=output)
             return
 
-        num_interactions = self.get_lfric_interactions(extract_list_dict)
+        num_interactions = self._get_lfric_interactions(extract_list_dict)
 
-        print("\n".join(self.write_lfric_testing_message(num_interactions)),
+        # FIXME: change to write call with the output buffer?
+        print("\n".join(self._lfric_testing_message(num_interactions)),
               file=output)
 
-    def gen_code_and_config_table(self, failed_configs, output=sys.stdout):
+    def add_code_and_config_table(self, failed_configs, output=sys.stdout):
 
         """Generate config/code owners table for the UM.
 
@@ -2265,11 +2272,11 @@ class SuiteReport(TracFormatter):
                 to sys.stdout if not specified.
         """
 
-        self.required_co_approvals(output)
-        self.required_config_approvals(failed_configs, output)
+        self.add_code_owner_approvals(output)
+        self.add_config_approvals(failed_configs, output)
 
     @staticmethod
-    def key_by_forced_status(item_tuple):
+    def _key_by_forced_status(item_tuple):
         """Get item sort keys in forced order.
 
         If the key is in the DESIRED_ORDER list then return the key's
@@ -2291,7 +2298,7 @@ class SuiteReport(TracFormatter):
             return str(DESIRED_ORDER.index(key))
         return key
 
-    def key_by_name_or_status(self, task_item):
+    def _key_by_name_or_status(self, task_item):
         """Get name or status sort key.
 
         Given a tuple containing a task name and its status, return
@@ -2313,7 +2320,7 @@ class SuiteReport(TracFormatter):
     # pylint: disable=too-many-branches
     # pylint: disable=too-many-locals
 
-    def generate_task_table(self, data, output=sys.stdout):
+    def add_task_table(self, data, output=sys.stdout):
         """Create a task table for the suite.
 
         Convert a task dictionary into a table and add it to an output
@@ -2348,7 +2355,7 @@ class SuiteReport(TracFormatter):
 
         failed_configs = []
         for task, state in sorted(
-            list(data.items()), key=self.key_by_name_or_status
+            list(data.items()), key=self._key_by_name_or_status
         ):
             # Count the number of times task have any given status.
             self.status_counts[state] += 1
@@ -2397,17 +2404,17 @@ class SuiteReport(TracFormatter):
 
         if self.primary_project.lower() == "um":
             # Add the config owners table for the UM
-            self.gen_code_and_config_table(failed_configs, output=output)
+            self.add_code_and_config_table(failed_configs, output=output)
 
         print("'''Suite Output'''", file=output)
-        self.gen_resources_table(output)
+        self.add_resources_table(output)
 
         print("\n |||| '''All Tasks''' || ", file=output)
 
         table = self.format_trac_table(["Status", "No. of Tasks"], output=output)
         table.send(None)
         for status, count in sorted(
-            self.status_counts.items(), key=self.key_by_forced_status
+            self.status_counts.items(), key=self._key_by_forced_status
         ):
             table.send([status, count])
         print("", file=output)
@@ -2428,7 +2435,7 @@ class SuiteReport(TracFormatter):
     # pylint: enable=too-many-branches
     # pylint: enable=too-many-locals
 
-    def generate_project_table(self, output=sys.stdout):
+    def add_project_table(self, output=sys.stdout):
         """Create a project summary table for the suite.
 
         Creates a table which contains a line for each project,
@@ -2483,7 +2490,7 @@ class SuiteReport(TracFormatter):
             row.append(self.format_trac_text([wc_text], wc_link, bold=True))
             table.send(row)
 
-    def gen_resources_table(self, output=sys.stdout):
+    def add_resources_table(self, output=sys.stdout):
 
         """Create a table of resource monitoring jobs.
 
@@ -2504,7 +2511,7 @@ class SuiteReport(TracFormatter):
             filename = self.suite_path / "log" / "job" / "1" / job / "NN" / "job.out"
 
             if filename.is_file():
-                wallclock, memory = self.get_wallclock_and_memory(filename)
+                wallclock, memory = self._get_wallclock_and_memory(filename)
                 if wallclock and memory:
                     if found_nothing:
                         table = self.format_trac_table(["Task", "Wallclock",
@@ -2521,7 +2528,7 @@ class SuiteReport(TracFormatter):
         print("", file=output)
 
     @staticmethod
-    def get_wallclock_and_memory(filename):
+    def _get_wallclock_and_memory(filename):
 
         """Parse wallclock and memory usage from job output.
 
@@ -2575,7 +2582,7 @@ class SuiteReport(TracFormatter):
         return wallclock, memory
 
     @staticmethod
-    def generate_groups(grouplist):
+    def _format_grouplist(grouplist):
         """Convert the groups run into a Trac formatted string.
 
         Args:
@@ -2592,7 +2599,7 @@ class SuiteReport(TracFormatter):
         output += _remove_quotes(grouplist[-1])
         return output
 
-    def get_project_tickets(self):
+    def _get_project_tickets(self):
 
         """Get all tickets associated with each project.
 
@@ -2610,7 +2617,7 @@ class SuiteReport(TracFormatter):
 
         return ticket_nos
 
-    def report_uncommited_changes(self, output=sys.stdout):
+    def add_uncommited_changes(self, output=sys.stdout):
 
         """Report on any uncommitted changes.
 
@@ -2657,7 +2664,7 @@ class SuiteReport(TracFormatter):
             print("-----", file=output)
             print("", file=output)
 
-    def report_multi_branches(self, output=sys.stdout):
+    def add_multi_branches(self, output=sys.stdout):
 
         """Report on the use of multiple branches.
 
@@ -2686,7 +2693,7 @@ class SuiteReport(TracFormatter):
         print("-----", file=output)
         print("", file=output)
 
-    def report_header(self, output=sys.stdout):
+    def add_report_header(self, output=sys.stdout):
 
         """Add a header summary table to the report.
 
@@ -2700,7 +2707,7 @@ class SuiteReport(TracFormatter):
                 Defaults to sys.stdout
         """
 
-        ticket_nos = self.get_project_tickets()
+        ticket_nos = self._get_project_tickets()
 
         title = ""
         if ticket_nos != "":
@@ -2729,7 +2736,7 @@ class SuiteReport(TracFormatter):
         # pylint: enable=consider-using-f-string
 
         header.send(["Site", self.site])
-        header.send(["Groups Run", self.generate_groups(self.groups)])
+        header.send(["Groups Run", self._format_grouplist(self.groups)])
         header.send(["''ROSE_ORIG_HOST''", self.rose_orig_host])
         header.send(["HOST_XCS", self.host_xcs])
 
@@ -2753,27 +2760,27 @@ class SuiteReport(TracFormatter):
         # pylint: enable=consider-using-f-string
 
         # Add the summary header
-        self.report_header(output)
+        self.add_report_header(output)
         print("", file=output)
 
         if self.uncommitted_changes:
-            self.report_uncommited_changes(output)
+            self.add_uncommited_changes(output)
 
         if self.multi_branches:
-            self.report_multi_branches(output)
+            self.add_multi_branches(output)
 
-        self.generate_project_table(output=output)
+        self.add_project_table(output=output)
         print("", file=output)
 
         # Check whether lfric shared files have been touched
         # Not needed if lfric the suite source
         if ("LFRIC" not in self.primary_project
             and self.primary_project != "UNKNOWN"):
-            self.check_lfric_extract_list(output)
+            self._check_lfric_extract_list(output)
 
         data = self.cylc_version.task_states()
 
-        self.generate_task_table(data, output=output)
+        self.add_task_table(data, output=output)
         print("}}}", file=output)
 
     def write_final_report(self, trac_log):
@@ -2817,7 +2824,6 @@ class SuiteReport(TracFormatter):
             raise
 
 # pylint: enable=too-many-instance-attributes
-# pylint: enable=too-many-public-methods
 
 # ==============================================================================
 #    End of   "class.SuiteReport()"
