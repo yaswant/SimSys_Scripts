@@ -28,7 +28,6 @@ adding the following to the cylc configuration:
 For interactive use, see the --help information.
 """
 
-# FIXME: consider giving methods consistent names
 # pylint: disable=too-many-lines
 
 import io
