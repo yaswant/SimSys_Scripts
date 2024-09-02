@@ -53,7 +53,6 @@ except ModuleNotFoundError:
     COMPLETION = False
 
 
-TRAC_LOG_FILE = "trac.log"
 DEFAULT_VERBOSITY = 3
 
 PINK_FAIL_TEXT = "'''[[span(style=color: #FF00FF, pink failure )]]'''"
@@ -1387,6 +1386,8 @@ class SuiteReport(TracFormatter):
             report.  Defaults to False which implies tasks should be
             sorted by status and then name.
     """
+
+    TRAC_LOG_FILE = "trac.log"
 
     def __init__(
         self,
@@ -2795,7 +2796,7 @@ class SuiteReport(TracFormatter):
 
         trac_log_path = (self.log_path
                          if self.log_path else
-                         self.suite_path) / TRAC_LOG_FILE
+                         self.suite_path) / self.TRAC_LOG_FILE
 
         # Attempt to provide user with some output,
         # even in event of serious exceptions
@@ -2805,15 +2806,15 @@ class SuiteReport(TracFormatter):
 
         except IOError:
             print(
-                f"[ERROR] Writing to {TRAC_LOG_FILE} file : {trac_log_path}"
+                f"[ERROR] Writing to {self.TRAC_LOG_FILE} file : {trac_log_path}"
             )
             print(
-                f"{TRAC_LOG_FILE} to this point "
+                f"{self.TRAC_LOG_FILE} to this point "
                 + "would have read as follows :\n"
             )
-            print(f"----- Start of {TRAC_LOG_FILE} -----")
+            print(f"----- Start of {self.TRAC_LOG_FILE} -----")
             print(trac_log.getvalue())
-            print(f"\n----- End of {TRAC_LOG_FILE} -----\n\n")
+            print(f"\n----- End of {self.TRAC_LOG_FILE} -----\n\n")
 
             raise
 
@@ -2914,7 +2915,7 @@ def parse_arguments():
     item = paths.add_argument("-L", "--log_path", type=directory_type,
                               dest="log_path",
                               metavar="DIR",
-                              help=f"output dir for {TRAC_LOG_FILE}")
+                              help=f"output dir for {SuiteReport.TRAC_LOG_FILE}")
     if COMPLETION:
         item.completer = argcomplete.DirectoriesCompleter()
 
