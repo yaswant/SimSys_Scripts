@@ -259,8 +259,7 @@ def _dict_merge(main_dict, addon_dict, force=False):
         if isinstance(value, dict):
             if key not in merged_dict:
                 merged_dict[key] = {}
-            # FIXME: recursive call should pass the caller's force setting?
-            merged_dict[key] = _dict_merge(merged_dict[key], value)
+            merged_dict[key] = _dict_merge(merged_dict[key], value, force)
         else:
             # Switch to Force main to take whatever addon has
             # No matching key in main - take whatever addon has including None
@@ -2178,7 +2177,6 @@ class SuiteReport(TracFormatter):
 
         return num_interactions
 
-    # FIXME: change to write directly to the output buffer?
     @staticmethod
     def add_lfric_testing_message(num_interactions, output=sys.stdout):
         """Mesage stating LFRic testing requirements.
@@ -2983,8 +2981,8 @@ def main():
             sort_by_name=opts.sort_by_name,
         )
 
-    except IOError as err:
-        # FIXME: handle IO and environment errors gracefully
+    except (IOError, EnvironmentError) as err:
+        # Handle IO and environment errors gracefully
         print(f"[ERROR]: {err}")
         raise SystemExit(1) from err
 
