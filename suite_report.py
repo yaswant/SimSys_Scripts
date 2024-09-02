@@ -2179,15 +2179,14 @@ class SuiteReport(TracFormatter):
 
     # FIXME: change to write directly to the output buffer?
     @staticmethod
-    def _lfric_testing_message(num_interactions):
+    def add_lfric_testing_message(num_interactions, output=sys.stdout):
         """Mesage stating LFRic testing requirements.
 
         Args:
             num_interactions (int): number of projects which interact
                 with LFRic
-
-        Returns:
-            list: strings containing lines of the output message
+            output (:obj:`io`, optional): an IO stream of some sort.
+                Defaults to sys.stdout
         """
 
         message = []
@@ -2208,8 +2207,7 @@ class SuiteReport(TracFormatter):
                 + " Apps testing is not required for this ticket."
             ]
 
-        message.append("")
-        return message
+        print("\n".join(message), file=output)
 
     def _check_lfric_extract_list(self, output=sys.stdout):
         """Check whether modified files are extracted by LFRic apps.
@@ -2252,10 +2250,7 @@ class SuiteReport(TracFormatter):
             return
 
         num_interactions = self._get_lfric_interactions(extract_list_dict)
-
-        # FIXME: change to write call with the output buffer?
-        print("\n".join(self._lfric_testing_message(num_interactions)),
-              file=output)
+        self.add_lfric_testing_message(num_interactions, output)
 
     def add_code_and_config_table(self, failed_configs, output=sys.stdout):
 
@@ -2594,7 +2589,7 @@ class SuiteReport(TracFormatter):
 
         output = ""
         for group in grouplist[:-1]:
-            output += f"{_remove_quotes(group)} [[br]]"
+            output += f"{_remove_quotes(group)} [[br]] "
         output += _remove_quotes(grouplist[-1])
         return output
 
