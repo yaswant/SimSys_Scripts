@@ -2227,6 +2227,7 @@ class SuiteReport(TracFormatter):
             "fcm:lfric_apps.xm_tr",
             "build/extract/extract.cfg",
         )
+        extract_list_dict = {}
 
         if extract_list_path:
             try:
@@ -2245,7 +2246,6 @@ class SuiteReport(TracFormatter):
                   file=output)
             return
 
-        # FIXME: extract_list_dict is initialised in a conditional
         num_interactions = self.get_lfric_interactions(extract_list_dict)
 
         print("\n".join(self.write_lfric_testing_message(num_interactions)),
