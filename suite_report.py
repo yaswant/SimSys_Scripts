@@ -66,59 +66,21 @@ BACKGROUND_COLOURS = {
     "unknown": "#BFFFD1",
 }
 
-FCM = {
-    "meto": "fcm",
-    "ecmwf": "fcm",
-    "nci": "fcm",
-    "bom": "fcm",
-    "uoe": "fcm",
-    "niwa": "fcm",
-    "kma": "fcm",
-    "vm": "fcm",
-    "jasmin": "fcm",
-    "cehwl1": "fcm",
-    "mss": "fcm",
-    "ncas": "fcm",
-    "psc": "fcm",
-    "uoleeds": "fcm",
-    "Unknown": "true",
-}
-RESOURCE_MONITORING_JOBS = {
-    "meto": [
-        "atmos-xc40_cce_um_fast_omp-seukv-4x9-noios-2t",
-    ],
-    "ecmwf": [],
-    "nci": [],
-    "bom": [],
-    "uoe": [],
-    "niwa": [],
-    "kma": [],
-    "vm": [],
-    "jasmin": [],
-    "cehwl1": [],
-    "mss": [],
-    "ncas": [],
-    "psc": [],
-    "uoleeds": [],
-    "Unknown": [],
-}
-CYLC_REVIEW_URL = {
-    "meto": "http://fcm1/cylc-review",
-    "ecmwf": "Unavailable",
-    "nci": "http://accessdev.nci.org.au/cylc-review",
-    "bom": "http://scs-watchdog-dev/rose-bush",
-    "uoe": "Unavailable",
-    "niwa": "http://w-rose01.maui.niwa.co.nz/cylc-review",
-    "kma": "Unavailable",
-    "vm": "http://localhost/cylc-review",
-    "jasmin": "Unavailable",
-    "cehwl1": "Unavailable",
-    "mss": "Unavailable",
-    "ncas": "http://puma.nerc.ac.uk/cylc-review",
-    "psc": "Unavailable",
-    "uoleeds": "Unavailable",
-    "Unknown": "Unavailable",
-}
+FCM = defaultdict(lambda: "fcm", Unknown="true")
+
+RESOURCE_MONITORING_JOBS = defaultdict(list,
+                                       meto=[
+                                           "atmos-xc40_cce_um_fast_omp-seukv-4x9-noios-2t",
+                                       ])
+
+CYLC_REVIEW_URL = defaultdict(lambda: "Unavailable",
+                              meto="http://fcm1/cylc-review",
+                              nci="http://accessdev.nci.org.au/cylc-review",
+                              bom="http://scs-watchdog-dev/rose-bush",
+                              niwa="http://w-rose01.maui.niwa.co.nz/cylc-review",
+                              vm="http://localhost/cylc-review",
+                              ncas="http://puma.nerc.ac.uk/cylc-review")
+
 HIGHLIGHT_ROSE_ANA_FAILS = [
     "_vs_",
     "lrun_crun_atmos",
@@ -128,45 +90,31 @@ HIGHLIGHT_ROSE_ANA_FAILS = [
     "atmos_thread",
     "-v-",
 ]
-COMMON_GROUPS = {
-    "meto": [
-        "all",
-        "nightly",
-        "developer",
-        "xc40",
-        "ex1a",
-        "spice",
-        "xc40_nightly",
-        "ex1a_nightly",
-        "spice_nightly",
-        "xc40_developer",
-        "ex1a_developer",
-        "spice_developer",
-        "ukca",
-        "recon",
-        "jules",
-        "xc40_ukca",
-        "ex1a_ukca",
-        "spice_ukca",
-        "xc40_jules",
-        "ex1a_jules",
-        "spice_jules",
-    ],
-    "ecmwf": [],
-    "nci": [],
-    "bom": [],
-    "uoe": [],
-    "niwa": [],
-    "kma": [],
-    "vm": [],
-    "jasmin": [],
-    "cehwl1": [],
-    "mss": [],
-    "ncas": [],
-    "psc": [],
-    "Unknown": [],
-}
 
+COMMON_GROUPS = defaultdict(list,
+                            meto=[
+                                "all",
+                                "nightly",
+                                "developer",
+                                "xc40",
+                                "ex1a",
+                                "spice",
+                                "xc40_nightly",
+                                "ex1a_nightly",
+                                "spice_nightly",
+                                "xc40_developer",
+                                "ex1a_developer",
+                                "spice_developer",
+                                "ukca",
+                                "recon",
+                                "jules",
+                                "xc40_ukca",
+                                "ex1a_ukca",
+                                "spice_ukca",
+                                "xc40_jules",
+                                "ex1a_jules",
+                                "spice_jules",
+                            ])
 
 def _run_command(command, ignore_fail=False):
 
@@ -1011,6 +959,7 @@ class Project:
                     link = url
         return link
 
+    # FIXME: this gives the wrong revisions for @HEAD
     def get_revision_from_layout(self, mirror_url):
         """Get a revision number from the mirror repository.
 
