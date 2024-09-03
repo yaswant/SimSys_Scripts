@@ -116,6 +116,28 @@ COMMON_GROUPS = defaultdict(list,
                                 "spice_jules",
                             ])
 
+
+class CommandError(Exception):
+
+    """Class to capture failed subprocess commands.
+
+    Args:
+        command (str): the command that failed
+        rc (int): the return value of the command
+        stdout (str): the output stream from the process
+        stderr (str): the error stream from the process
+    """
+
+    def __init__(self, command, rc, stdout, stderr):
+        self.command = command
+        self.rc = int(rc)
+        self.stdout = stdout
+        self.stderr = stderr
+
+    def __str__(self):
+        return f"error running command {repr(self.command)}"
+
+
 def _run_command(command, ignore_fail=False):
 
     """Run a command and capture its output.
@@ -134,7 +156,7 @@ def _run_command(command, ignore_fail=False):
             stadnard error as lists of lines.
 
     Raises:
-        IOError: if ignore_fail is set and the command returns non-zero
+        CommandError: if ignore_fail is set and the command returns non-zero
     """
 
     with subprocess.Popen(
@@ -148,12 +170,8 @@ def _run_command(command, ignore_fail=False):
             pobj.stderr.read(),
         )
     if retcode != 0 and not ignore_fail:
-        # FIXME: replace with a custom exception
-        print(f"[ERROR] running {command}")
-        print(f"[INFO] RC: {retcode}")
-        print(f"[INFO] Stdout: {stdout}")
-        print(f"[INFO] Stderr: {stderr}")
-        raise IOError("run_command")
+        raise CommandError(" ".join(command), retcode, stdout, stderr)
+
     # Reformat stdout into a list
     stdout = "".join(stdout)
     stdout = stdout.split("\n")
@@ -297,7 +315,8 @@ class CylcVersion:
             self.cylc_config = self.cylc_log
 
         if not self.cylc_config.exists():
-            raise ValueError("Not a valid cylc run directory: " + repr(cylc_path))
+            raise FileNotFoundError(2, "Not a valid cylc run directory",
+                                    str(cylc_path))
 
         # Separate the suite directory and try to get the current
         # username
@@ -340,8 +359,8 @@ class CylcVersion:
                 break
 
             if path is None:
-                raise IOError(2, "Suite config file not found",
-                              str(self.cylc_config))
+                raise FileNotFoundError(2, "Suite config file not found",
+                                        str(self.cylc_config))
 
         # Check file exist and force an exception if not
         path = path.absolute()
@@ -450,6 +469,10 @@ class CylcVersion:
         Returns:
             tuple: a dictionary of projects and an integer containing the
                 number of uncommitted changes
+
+        Raises:
+            KeyError: raised when a URL or revision or status cannot
+                be found in the vcs file
         """
 
         projects = {}
@@ -1739,7 +1762,7 @@ class SuiteReport(TracFormatter):
                         owners_dict.update(
                             {section.lower(): [owners, others]}
                         )
-        except IOError:
+        except OSError:
             print(f"Can't find a valid copy of {fname} file")
             return None
 
@@ -1947,7 +1970,7 @@ class SuiteReport(TracFormatter):
                         section = line.strip("\n")
                         break
 
-        except IOError:
+        except OSError:
             pass
 
         # Remove C-style comment characters, if any
@@ -2735,7 +2758,7 @@ class SuiteReport(TracFormatter):
         """Write the buffered final report.
 
         Takes the contents of a buffered IO instance and writes it out
-        to TRAC_LOG_FILE.  If an IOError occurs while writing to the
+        to TRAC_LOG_FILE.  If an OSError occurs while writing to the
         output file, an error message and the contents of the buffer
         are printed to the stdout stream, ensuring the user always
         gets something.
@@ -2756,7 +2779,7 @@ class SuiteReport(TracFormatter):
             with open(trac_log_path, "w", encoding="utf-8") as fd:
                 print(trac_log.getvalue(), file=fd)
 
-        except IOError:
+        except OSError:
             print(
                 f"[ERROR] Writing to {self.TRAC_LOG_FILE} file : {trac_log_path}"
             )
@@ -2935,10 +2958,19 @@ def main():
             sort_by_name=opts.sort_by_name,
         )
 
-    except (IOError, EnvironmentError) as err:
+    except (OSError, EnvironmentError) as err:
         # Handle IO and environment errors gracefully
         print(f"[ERROR]: {err}")
         raise SystemExit(1) from err
+
+    except CommandError as err:
+        # Handle errors from commands where ignore_fail is set to
+        # False and return code is non-zero
+        print(f"[ERROR] {err}")
+        print(f"[INFO] RC: {err.rc}")
+        print(f"[INFO] Stdout: {err.stdout}")
+        print(f"[INFO] Stderr: {err.stderr}")
+        raise SystemExit(2) from err
 
     try:
         # Handle report generation errors differently because there
