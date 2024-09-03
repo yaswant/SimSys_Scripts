@@ -44,7 +44,7 @@ from argparse import ArgumentParser, ArgumentTypeError, \
 from collections import defaultdict
 from pathlib import Path
 from tempfile import TemporaryDirectory, mkstemp
-from fcm_bdiff import get_branch_diff_filenames
+from fcm_bdiff import get_branch_diff_filenames, is_trunk
 
 try:
     import argcomplete
@@ -1075,6 +1075,11 @@ class Project:
         Returns:
             list: a list of strings pointing to files
         """
+
+        if is_trunk(mirror_loc):
+            # Stop now to skip the nothing to do messages
+            return []
+
         for attempt in range(5):
             # pylint: disable=broad-exception-caught
 
