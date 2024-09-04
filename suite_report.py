@@ -400,12 +400,12 @@ class CylcVersion:
 
         find_proj_name = re.compile(r"/(\w+)-\d+.version")
         version_files = []
-        version_files = (self.cylc_path / "log ").glob("/*.version")
+        version_files = (self.cylc_path / "log").glob("*.version")
 
         for vfile in version_files:
             if "rose-suite-run.version" in vfile.name:
                 continue
-            result = find_proj_name.search(vfile)
+            result = find_proj_name.search(str(vfile))
             if result:
                 project = result.group(1).upper()
                 projects[project] = {}
