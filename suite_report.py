@@ -204,11 +204,12 @@ def _dict_merge(main_dict, addon_dict, force=False):
     is itself a dictionary, its contents are duplicated by
     _dict_merge.
 
-    Where an item is in both dictionaries, the value in main has
-    priority unless force is True.  Where a key does not exist in main
-    and the value in addon is None, a new key will not be set in main
-    unless force is True.  These behaviours differentiate it from
-    dict.update()
+    Where an item is in both dictionaries, the value in main will be
+    replaced unless the value in addon is None.  If the item in not in
+    main and is in addon, it will be set replaced with the value of
+    addon regardless of whether this is None or not.  If force is set
+    to True, existing values will always be replaced.  These
+    behaviours differentiate it from dict.update()
 
     Args:
         main_dict (dict): dictionary of base values
@@ -219,6 +220,7 @@ def _dict_merge(main_dict, addon_dict, force=False):
 
     Returns:
         dict: copy of the main dictionary with addon items merged in
+
     """
     merged_dict = main_dict.copy()
     for key, value in addon_dict.items():
@@ -231,7 +233,7 @@ def _dict_merge(main_dict, addon_dict, force=False):
             # No matching key in main - take whatever addon has including None
             # Or
             # Override main with contents of addon
-            if force or key not in merged_dict or value is not None:
+            if force or key not in merged_dict or (key in merged_dict and value is not None):
                 merged_dict[key] = value
     return merged_dict
 
