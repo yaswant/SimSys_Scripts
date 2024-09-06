@@ -138,7 +138,7 @@ class CommandError(Exception):
         return f"error running command {repr(self.command)}"
 
 
-def _run_command(command, ignore_fail=False):
+def run_command(command, ignore_fail=False):
 
     """Run a command and capture its output.
 
@@ -179,7 +179,7 @@ def _run_command(command, ignore_fail=False):
     return retcode, stdout, stderr
 
 
-def _remove_quotes(string):
+def remove_quotes(string):
 
     """Remove double and single quotes from a string.
 
@@ -195,14 +195,14 @@ def _remove_quotes(string):
     return string
 
 
-def _dict_merge(main_dict, addon_dict, force=False):
+def dict_merge(main_dict, addon_dict, force=False):
 
     """Selectively combine two dictionaries to create a new one.
 
     Create a copy of a dictionary that contains items from a second
     that are not in the first.  If any entry in the addon dictionary
     is itself a dictionary, its contents are duplicated by
-    _dict_merge.
+    dict_merge.
 
     Where an item is in both dictionaries, the value in main will be
     replaced unless the value in addon is None.  If the item in not in
@@ -227,7 +227,7 @@ def _dict_merge(main_dict, addon_dict, force=False):
         if isinstance(value, dict):
             if key not in merged_dict:
                 merged_dict[key] = {}
-            merged_dict[key] = _dict_merge(merged_dict[key], value, force)
+            merged_dict[key] = dict_merge(merged_dict[key], value, force)
         else:
             # Switch to Force main to take whatever addon has
             # No matching key in main - take whatever addon has including None
@@ -238,7 +238,7 @@ def _dict_merge(main_dict, addon_dict, force=False):
     return merged_dict
 
 
-def _get_current_head_revision(mirror_url, fcm_exec):
+def get_current_head_revision(mirror_url, fcm_exec):
 
     """Get the head revision using a local mirror URL.
 
@@ -251,7 +251,7 @@ def _get_current_head_revision(mirror_url, fcm_exec):
             or an empty string if no revision was found.
     """
     revision = ""
-    _, stdout, _ = _run_command([fcm_exec, "branch-info", mirror_url])
+    _, stdout, _ = run_command([fcm_exec, "branch-info", mirror_url])
     find_last_changed_rev = re.compile(r"Last Changed Rev:\s*(\d+)")
     for line in stdout:
         result = find_last_changed_rev.search(line)
@@ -633,7 +633,7 @@ class Project:
         self._owner = owner
         self.params = {}
 
-        self["tested source"] = _remove_quotes(params["tested source"])
+        self["tested source"] = remove_quotes(params["tested source"])
 
         target = params.get("repo loc", self["tested source"])
         self["repo loc"] = self.convert_to_srs(target)
@@ -680,7 +680,7 @@ class Project:
             if url is None or mirror_url is None:
                 continue
             if ":" in url and "@" not in url:
-                revision = _get_current_head_revision(mirror_url, self.fcm_exec)
+                revision = get_current_head_revision(mirror_url, self.fcm_exec)
                 self[location + " loc"] = url + "@" + revision
                 self[location + " mirror"] = (
                     mirror_url + "@" + revision
@@ -764,7 +764,7 @@ class Project:
         parent = None
         stdout = ""
         command = [self.fcm_exec, "branch-info", mirror_url]
-        _, stdout, _ = _run_command(command, ignore_fail=True)
+        _, stdout, _ = run_command(command, ignore_fail=True)
         find_branch_parent = re.compile(r"Branch Parent:\s*(.*)")
         for line in stdout:
             result = find_branch_parent.search(line)
@@ -784,7 +784,7 @@ class Project:
         """
         retcode = 0
         command = [self.fcm_exec, "info", url]
-        retcode, _, _ = _run_command(command, ignore_fail=True)
+        retcode, _, _ = run_command(command, ignore_fail=True)
         if retcode == 0:
             return True
         return False
@@ -950,7 +950,7 @@ class Project:
         link = None
         if url is None or mirror_url is None or re.search(r"^file:/", url):
             return None
-        _, stdout, _ = _run_command([self.fcm_exec, "loc-layout", mirror_url])
+        _, stdout, _ = run_command([self.fcm_exec, "loc-layout", mirror_url])
         path = None
         root = None
         lproject = None
@@ -998,7 +998,7 @@ class Project:
         """
         if mirror_url is None:
             return None
-        _, stdout, _ = _run_command([self.fcm_exec, "loc-layout", mirror_url])
+        _, stdout, _ = run_command([self.fcm_exec, "loc-layout", mirror_url])
         revision = None
         find_peg_rev = re.compile(r"^peg_rev:\s*")
         for line in stdout:
@@ -1026,7 +1026,7 @@ class Project:
             r"[fs][cv][mn]:\w+(.xm|.x|)_tr[/@$]", mirror_url
         ):
             return ticket_number
-        _, stdout, _ = _run_command([self.fcm_exec, "log", "-l", "1", mirror_url])
+        _, stdout, _ = run_command([self.fcm_exec, "log", "-l", "1", mirror_url])
         for line in stdout:
             result = re.search(r"^\s*(#\d+)", line)
             if result:
@@ -1111,7 +1111,7 @@ class JobSources:
 
     def __iadd__(self, extras):
 
-        self.job_sources = _dict_merge(self.job_sources, extras)
+        self.job_sources = dict_merge(self.job_sources, extras)
         return self
 
     def __contains__(self, key):
@@ -1440,7 +1440,7 @@ class SuiteReport(TracFormatter):
         # with lfric_apps at the top, then UM, then the rest
         self.primary_project = self.job_sources.primary_project
 
-        self.groups = [_remove_quotes(group) for group in self.groups]
+        self.groups = [remove_quotes(group) for group in self.groups]
 
         fcm_exec = FCM[self.site]
         Project.fcm_exec = fcm_exec
@@ -1518,7 +1518,7 @@ class SuiteReport(TracFormatter):
         self.multi_branches = multiple_branches
 
     @staticmethod
-    def _unpack_suite_value(value, remove_quotes=True, split_on_comma=False):
+    def _unpack_suite_value(value, dequote=True, split_on_comma=False):
 
         """Unpack a value field from the suite file.
 
@@ -1527,8 +1527,8 @@ class SuiteReport(TracFormatter):
 
         Args:
             value (str): value to clean up
-            remove_quotes ((:obj:`bool`, optional): whether to remove
-                single and double quotes.  Defaults to True.
+            dequote ((:obj:`bool`, optional): whether to remove single
+                and double quotes.  Defaults to True.
             split_on_comma ((:obj:`bool`, optional): whether to split
                 the entry into a list using commas.  Defaults to False
                 which implies the output should be a string.
@@ -1536,11 +1536,12 @@ class SuiteReport(TracFormatter):
         Returns:
             obj: a cleaned up string if split_on_comma is False or a
                 list of strings if True
+
         """
 
         value = value.strip()
-        if remove_quotes:
-            value = _remove_quotes(value)
+        if dequote:
+            value = remove_quotes(value)
 
         if split_on_comma:
             # Remove brackets and split on comma
@@ -1612,7 +1613,7 @@ class SuiteReport(TracFormatter):
         fcm_exec = FCM[self.site]
 
         projects = {}
-        _, stdout, _ = _run_command([fcm_exec, "kp"])
+        _, stdout, _ = run_command([fcm_exec, "kp"])
         find_primary_loc = re.compile(r"location{primary}")
         find_projects = re.compile(r"\[(.*)\]\s*=\s*(.*)")
         find_x_keyword = re.compile(r".x$")
@@ -2567,8 +2568,8 @@ class SuiteReport(TracFormatter):
 
         output = ""
         for group in grouplist[:-1]:
-            output += f"{_remove_quotes(group)} [[br]] "
-        output += _remove_quotes(grouplist[-1])
+            output += f"{remove_quotes(group)} [[br]] "
+        output += remove_quotes(grouplist[-1])
         return output
 
     def _get_project_tickets(self):
