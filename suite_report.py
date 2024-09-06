@@ -261,30 +261,6 @@ def get_current_head_revision(mirror_url, fcm_exec):
     return revision
 
 
-def _url_to_trac_link(url):
-    """Convert a URL to a Trac code link.
-
-    Takes a URL amd edits text to resemble a Trac link for code on the
-    SRS.
-
-    Args:
-        url (str): a subversion URL
-
-    Returns:
-        str: a Trac link form of URL or None if 'svn' was absent from
-            the url
-    """
-    if re.search(r"/svn/", url):
-        link_2_url = re.sub(r"svn", r"trac", url)
-        elements = link_2_url.split("/")
-        elements.insert(elements.index("trac") + 2, "browser")
-        link_2_url = "/".join(elements)
-        link_2_url = re.sub(r"@", r"?rev=", link_2_url)
-    else:
-        link_2_url = None
-    return link_2_url
-
-
 class CylcVersion:
     """Class to abstract cylc configuration.
 
@@ -912,6 +888,31 @@ class Project:
                 break
         return keyword_url
 
+    @staticmethod
+    def url_to_trac_link(url):
+        """Convert a URL to a Trac code link.
+
+        Takes a URL amd edits text to resemble a Trac link for code on the
+        SRS.
+
+        Args:
+            url (str): a subversion URL
+
+        Returns:
+            str: a Trac link form of URL or None if 'svn' was absent
+                from the url
+        """
+
+        if re.search(r"/svn/", url):
+            link_2_url = re.sub(r"svn", r"trac", url)
+            elements = link_2_url.split("/")
+            elements.insert(elements.index("trac") + 2, "browser")
+            link_2_url = "/".join(elements)
+            link_2_url = re.sub(r"@", r"?rev=", link_2_url)
+        else:
+            link_2_url = None
+        return link_2_url
+
     def convert_to_link(self, url):
 
         """Convert a URL into a Trac wiki format link.
@@ -929,7 +930,7 @@ class Project:
             # Look for a matching part of the URL in the list of projects
             for _, svn in self._owner.urls.items():
                 if re.search(svn, url):
-                    link = _url_to_trac_link(url)
+                    link = self.url_to_trac_link(url)
                     break
         return link
 
