@@ -1289,6 +1289,11 @@ class TracFormatter:
                 without an error occurring
             title (:obj:`str`, optional): an optional table header.
                 Defaults to None which implies no header is needed.
+            preamble (:obj:`list`, optional): an optional list of
+                strings to use to populate the first row with bold
+                values.  Values that are None result in an empty bold
+                string.  Default is None, which implies no preamble
+                should be added.
             output (:obj:`io`, optional): an IO stream of some sort.
                 Defaults to sys.stdout.
 
