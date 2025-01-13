@@ -14,6 +14,11 @@
 # rsyncs with the xcs.
 # This script is NOT intended to be run independently of '../meto_update_kgo.sh'
 
+# Disable messages about quoting variables because the warnings are
+# unhelpful and resolving them would result in excessive quoting of
+# safe values and strings
+# shellcheck disable=SC2086
+
 # Set colour codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -31,6 +36,7 @@ do
         P) platforms=${OPTARG};;
         F) variables_extension=${OPTARG};;
         V) version_number=${OPTARG};;
+        *) echo "usage: $(basename $0) [options]" && exit 1;;
     esac
 done
 
@@ -51,17 +57,15 @@ mkdir -p $variables_dir
 
 # If spice has kgo updates
 if [[ $platforms == *"spice"* ]] && [[ $platforms != *"azspice"* ]]; then
-    printf "${GREEN}\n\nRunning KGO Update Script on spice.\n${NC}"
+    echo -ne "${GREEN}\n\nRunning KGO Update Script on spice.\n${NC}"
 
     # Run the Update Script
-    $kgo_command_spice
-
-    if [[ $? -ne 0 ]]; then
-        printf "${RED}\nThe installation script has failed on spice.\n${NC}"
+    if ! $kgo_command_spice; then
+        echo -ne "${RED}\nThe installation script has failed on spice.\n${NC}"
     else
         # Move the updated variables file and script into the ticket folder
-        printf "${GREEN}\n\nSuccessfully installed on spice.\n${NC}"
-        printf "${GREEN}Moving the generated files into spice ${variables_dir}.${NC}\n"
+        echo -ne "${GREEN}\n\nSuccessfully installed on spice.\n${NC}"
+        echo -ne "${GREEN}Moving the generated files into spice ${variables_dir}.${NC}\n"
         if [ $new_release -ne 1 ]; then
             mv ~/variables${variables_extension}_${new_kgo_dir} ${variables_dir}/spice_updated_variables${variables_extension}
         fi
@@ -71,17 +75,15 @@ fi
 
 # If azspice has kgo updates
 if [[ $platforms == *"azspice"* ]]; then
-    printf "${GREEN}\n\nRunning KGO Update Script on azspice.\n${NC}"
+    echo -ne "${GREEN}\n\nRunning KGO Update Script on azspice.\n${NC}"
 
     # Run the Update Script
-    $kgo_command_azspice
-
-    if [[ $? -ne 0 ]]; then
-        printf "${RED}\nThe installation script has failed on azspice.\n${NC}"
+    if ! $kgo_command_azspice; then
+        echo -ne "${RED}\nThe installation script has failed on azspice.\n${NC}"
     else
         # Move the updated variables file and script into the ticket folder
-        printf "${GREEN}\n\nSuccessfully installed on azspice.\n${NC}"
-        printf "${GREEN}Moving the generated files into azspice ${variables_dir}.${NC}\n"
+        echo -ne "${GREEN}\n\nSuccessfully installed on azspice.\n${NC}"
+        echo -ne "${GREEN}Moving the generated files into azspice ${variables_dir}.${NC}\n"
         if [ $new_release -ne 1 ]; then
             mv ~/variables${variables_extension}_${new_kgo_dir} ${variables_dir}/azspice_updated_variables${variables_extension}
         fi
@@ -91,7 +93,7 @@ fi
 
 # If xc40 has kgo updates
 if [[ $platforms == *"xc40"* ]]; then
-    printf "${GREEN}\n\nRunning KGO Update Script on xc40.\n${NC}"
+    echo -ne "${GREEN}\n\nRunning KGO Update Script on xc40.\n${NC}"
 
     host_xc40=$(rose host-select xc)
 
@@ -103,15 +105,13 @@ if [[ $platforms == *"xc40"* ]]; then
              ${kgo_command_xc40}"
 
     # SSH to the xc40 with the run command
-    ssh -Y $host_xc40 $command
-
-    if [[ $? -ne 0 ]]; then
-        printf "${RED}\nThe installation script has failed on xc40.\n${NC}"
+    if ! ssh -Y $host_xc40 $command; then
+        echo -ne "${RED}\nThe installation script has failed on xc40.\n${NC}"
     else
         # rsync the generated variables file and script back to frum on linux
         # This cleans up the original files
-        printf "${GREEN}\n\nSuccessfully installed on xc40.\n${NC}"
-        printf "${GREEN}Rsyncing the generated files into spice ${variables_dir}.\n${NC}"
+        echo -ne "${GREEN}\n\nSuccessfully installed on xc40.\n${NC}"
+        echo -ne "${GREEN}Rsyncing the generated files into spice ${variables_dir}.\n${NC}"
         if [ $new_release -ne 1 ]; then
             rsync --remove-source-files -avz \
                 frum@$host_xc40:~/variables${variables_extension}_${new_kgo_dir} \
@@ -128,7 +128,7 @@ fi
 
 # If ex1a has kgo updates
 if [[ $platforms == *"ex1a"* ]]; then
-    printf "${GREEN}\n\nRunning KGO Update Script on ex1a.\n${NC}"
+    echo -ne "${GREEN}\n\nRunning KGO Update Script on ex1a.\n${NC}"
 
     host_ex=$(rose host-select exab)
 
@@ -142,13 +142,13 @@ if [[ $platforms == *"ex1a"* ]]; then
     # SSH to the ex1a with the run command
     ssh -Y $host_ex $command
 
-    if [[ $? -ne 0 ]]; then
-        printf "${RED}\nThe installation script has failed on ex1a.\n${NC}"
+    if ! ssh -Y $host_ex $command; then
+        echo -ne "${RED}\nThe installation script has failed on ex1a.\n${NC}"
     else
         # rsync the generated variables file and script back to frum on linux
         # This cleans up the original files
-        printf "${GREEN}\n\nSuccessfully installed on ex1a.\n${NC}"
-        printf "${GREEN}Rsyncing the generated files into azspice ${variables_dir}.\n${NC}"
+        echo -ne "${GREEN}\n\nSuccessfully installed on ex1a.\n${NC}"
+        echo -ne "${GREEN}Rsyncing the generated files into azspice ${variables_dir}.\n${NC}"
         if [ $new_release -ne 1 ]; then
             rsync --remove-source-files -avz \
                     umadmin@$host_ex:~/variables${variables_extension}_${new_kgo_dir} \
