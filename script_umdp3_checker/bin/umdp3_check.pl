@@ -356,7 +356,7 @@ if ( $trunkmode == 0 ) {
 
 # The @external_checks array contains the names of all the non-UM repositories
 # extracted by the UM which should also be checked.
-my @external_checks = ( "shumlib", "meta", "ukca" );
+my @external_checks = ( "shumlib", "meta", "ukca", "jules" );
 my %filepath_mapping = ( 'meta' => 'um_meta' );
 my @extracts = ();
 
