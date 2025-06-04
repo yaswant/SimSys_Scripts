@@ -429,7 +429,7 @@ def main():
             if suite.restarted:
                 output(f"Working on suite {suite}")
                 suite.retrigger(args.dry_run, advancer)
-        output()
+                output()
 
     output("Retriggering complete")
 
