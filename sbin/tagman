@@ -14,20 +14,20 @@
 # - Always verify the current tags before making changes.
 
 set -euo pipefail
-
-# Default values
-DEFAULT_REPO="MetOffice/git_playground"
-REPO="${REPO:-$DEFAULT_REPO}"
-REF=""
-TAG=""
-MESSAGE=""
-ACTION=""
-DRY_RUN=false
-
+# Colour codes for output
 GRN='\033[0;32m'
 RED='\033[0;31m'
 YLW='\033[0;33m'
 NC='\033[0m'
+
+# Default values
+DEFAULT_REPO="MetOffice/git_playground"
+REPO="${REPO:-$DEFAULT_REPO}"
+# Variables set by parse_args()
+REF=""
+TAG=""
+MESSAGE=""
+DRY_RUN=false
 
 usage() {
   cat <<EOF
