@@ -352,6 +352,34 @@ def update_versions_file(meta_dirs: list[Path], upgrade_name: str) -> None:
         add_new_import(versions_file, upgrade_name)
 
 
+def update_versions_mod(repo: str, filepath: Path, version: str) -> None:
+    """
+    Update the versions numbers in lfric versions mod files
+    """
+
+    print(f"[INFO] Updating lfric_{repo}_versions_mod.F90")
+
+    version = version.removeprefix("vn").split(".")
+    updates = {
+        "major": version[0],
+        "minor": version[1],
+        "patch": "0",
+        "release": ".true.",
+    }
+
+    lines = filepath.read_text().split("\n")
+    for i, line in enumerate(lines):
+        if len(updates) == 0:
+            break
+        for item, val in updates.items():
+            if re.match(rf".*::\s*lfric_{repo}_{item}_version\s*=", line):
+                lines[i] = f"{line.split('=')[0]} = {val}"
+                del updates[item]
+                break
+
+    filepath.write_text("\n".join(lines))
+
+
 def ticket_number(opt: str) -> str:
     """
     Check that the command line supplied ticket number is of a suitable format
@@ -396,9 +424,8 @@ def parse_args() -> argparse.Namespace:
         "--apps",
         default=Path(".").absolute(),
         type=Path,
-        help="The path to the LFRic Apps working copy being used. Defaults to  "
-        "the location the script is being run from - this assumes you are in a "
-        "working copy.",
+        help="The path to the LFRic Apps working copy being used. Defaults to the "
+        "location the script is being run from - this assumes you are in an Apps clone",
     )
     parser.add_argument(
         "-c",
@@ -480,6 +507,26 @@ def main() -> None:
     )
 
     update_versions_file(meta_dirs, upgrade_file_name)
+
+    update_versions_mod(
+        "apps",
+        args.apps
+        / "science"
+        / "shared"
+        / "source"
+        / "utilities"
+        / "lfric_apps_version_mod.f90",
+        args.version,
+    )
+    update_versions_mod(
+        "core",
+        args.core
+        / "infrastructure"
+        / "source"
+        / "utilities"
+        / "lfric_core_version_mod.f90",
+        args.version,
+    )
 
 
 if __name__ == "__main__":
