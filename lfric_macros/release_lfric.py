@@ -241,7 +241,9 @@ def copy_head_meta(meta_dirs: list[Path], apps: Path, core: Path, version: str) 
         _ = run_command(command)
 
 
-def update_meta_import_path(meta_dirs: list[Path], version: str) -> None:
+def update_meta_import_path(
+    meta_dirs: list[Path], version: str, jules_version: str
+) -> None:
     """
     Change HEAD to vnX.Y in meta import statements in the newly created
     vnX.Y/rose-meta.conf files
@@ -261,7 +263,10 @@ def update_meta_import_path(meta_dirs: list[Path], version: str) -> None:
             elif in_imports and not line.strip().startswith("="):
                 break
             if in_imports:
-                line = line.replace("HEAD", version)
+                if "jules-lfric" in line:
+                    line = line.replace("HEAD", jules_version)
+                else:
+                    line = line.replace("HEAD", version)
                 lines[i] = line
 
         with open(meta_file, "w") as f:
@@ -413,6 +418,13 @@ def parse_args() -> argparse.Namespace:
         help="The new version number we are updating to (format X.Y)",
     )
     parser.add_argument(
+        "-j",
+        "--jules_version",
+        required=True,
+        help="The newly released version of Jules for jules-lfric metadata imports "
+        "(format X.Y)",
+    )
+    parser.add_argument(
         "-t",
         "--ticket",
         required=True,
@@ -440,6 +452,7 @@ def parse_args() -> argparse.Namespace:
     args.core = args.core.expanduser().absolute()
     args.version = f"vn{args.version}"
     args.old_version = f"vn{args.old_version}"
+    args.jules_version = f"vn{args.jules_version}"
 
     return args
 
@@ -457,28 +470,15 @@ def main() -> None:
 
     set_dependency_path(args.apps, args.core)
 
-    # Find all metadata directories, excluing jules shared and lfric inputs as these
-    # have metadata but no macros.
+    # Find all metadata directories, excluing lfric-inputs as this has metadata but no
+    # macros.
     exclude_dirs = (
-        ".svn",
+        ".git",
         "rose-stem",
         "integration-test",
-        "lfric-jules-shared",
         "lfricinputs",
     )
     meta_dirs = find_meta_dirs([args.apps, args.core], exclude_dirs)
-
-    # Find JULES shared metadata directories and combine with all other metadirs for
-    # where they are handled differently
-    jules_meta_path = (
-        args.apps
-        / "interfaces"
-        / "jules_interface"
-        / "rose-meta"
-        / "lfric-jules-shared"
-    )
-    jules_shared_meta_dirs = find_meta_dirs([jules_meta_path])
-    meta_dirs_plus_jules = meta_dirs.union(jules_shared_meta_dirs)
 
     update_version_number(args.apps, args.version)
 
@@ -498,9 +498,9 @@ def main() -> None:
     )
     print("\n[INFO] Successfully upgraded apps")
 
-    copy_head_meta(meta_dirs_plus_jules, args.apps, args.core, args.version)
+    copy_head_meta(meta_dirs, args.apps, args.core, args.version)
 
-    update_meta_import_path(meta_dirs, args.version)
+    update_meta_import_path(meta_dirs, args.version, args.jules_version)
 
     upgrade_file_name = copy_versions_files(
         meta_dirs, args.old_version, args.version, args.apps, args.core
