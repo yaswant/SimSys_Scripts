@@ -20,7 +20,6 @@ from pathlib import Path
 INVALID_METADATA = [
     "jules-lfric",
     "jules-lsm",
-    "lfric-jules-shared",
     "socrates-radiation",
     "um-aerosol",
     "um-boundary_layer",
@@ -191,6 +190,13 @@ def parse_args() -> argparse.Namespace:
         "required. If both are provided then it will be assumed that Apps is the "
         "repository to check.",
     )
+    parser.add_argument(
+        "-j",
+        "--jules",
+        default=None,
+        help="The path to the JULES source required for jules-lfric & jules-shared "
+        "metadata.",
+    )
 
     args = parser.parse_args()
 
@@ -204,6 +210,8 @@ def parse_args() -> argparse.Namespace:
         args.apps = Path(args.apps).absolute().expanduser()
     if args.core:
         args.core = Path(args.core).absolute().expanduser()
+    if args.jules:
+        args.jules = Path(args.jules).absolute().expanduser()
 
     return args
 
@@ -229,6 +237,9 @@ def main() -> None:
             # Apps hasn't been set
             source_path = args.core
             rose_meta_path = f"{args.core / 'rose-meta'}"
+    if args.jules:
+        meta_paths += f"-M {args.jules / 'rose-meta'} "
+        rose_meta_path += f":{args.jules / 'rose-meta'}"
 
     if check_rose_metadata(rose_meta_path, source_path) or check_rose_stem_apps(
         meta_paths, source_path
