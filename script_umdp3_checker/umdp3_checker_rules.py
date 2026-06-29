@@ -134,7 +134,9 @@ class UMDP3Checker:
             if line.lstrip(" ").startswith("!"):
                 continue
             clean_line = self.remove_quoted(line)
-            for pattern in [f"\\b{kw}\\b" for kw in unseparated_keywords_list]:
+            clean_line = self.comment_line.sub("", clean_line).strip()
+            # The [^#] is to avoid false positives on #endif and similar.
+            for pattern in [f"([^#]|^)\\b{kw}\\b" for kw in unseparated_keywords_list]:
                 if re.search(pattern, clean_line, re.IGNORECASE):
                     failures += 1
                     error_log = self.add_error_log(
@@ -158,7 +160,7 @@ class UMDP3Checker:
         count = -1
         for count, line in enumerate(lines):
             clean_line = self.remove_quoted(line)
-            clean_line = re.sub(r"!.*$", "", clean_line)
+            clean_line = self.comment_line.sub("", clean_line).strip()
 
             if match := re.search(r"\bGO\s*TO\s+(\d+)", clean_line, re.IGNORECASE):
                 label = match.group(1)

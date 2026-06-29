@@ -360,7 +360,18 @@ class ConformanceChecker:
                         for count, (title, info) in enumerate(
                             test_result.errors.items()
                         ):
-                            print(" " * 8 + f"{count + 1:2} : {title} : {info}")
+                            if len(info) == 1 and info[0] == 0:
+                                print(" " * 8 + f"{count + 1:2} : {title}")
+                            else:
+                                plural = "" if len(info) == 1 else "s"
+                                print(
+                                    " " * 8
+                                    + f"{count + 1:2} : "
+                                    + f"{title} at line{plural} : "
+                                    + f"{', '.join([str(x) for x in info[:-1]])}"
+                                    + f"{' and ' if len(info) > 1 else ''}"
+                                    + f"{info[-1] if info else ''}"
+                                )
                         print(" " * 8 + line_2(82))
                 elif print_volume >= 3:
                     print(f"     {test_result.checker_name:60s} : ✓ PASS")
