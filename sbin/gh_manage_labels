@@ -71,6 +71,7 @@ labels=(
   "performance|#c2e0c6|Direct speed execution metrics or runtime improvements"
   "optimization|#fef2c0|Memory, storage, or other resource optimizations"
   "refactor|#d4c5f9|Code restructuring without altering external behavior"
+  "ignore-changelog|#fef2c0|Changes should be ignored in changelogs or release notes"
 )
 
 # -- Add labels in relevant repositories
