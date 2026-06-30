@@ -62,6 +62,15 @@ labels=(
   "cla-signed|#0052cc|The CLA has been signed as part of this PR - added by GA"
   "optimisation|#DB4DFF|This PR adds optimisations or edits OpenMP code"
   "code-upload|#e4e669|Code upload request via Issues for academic peer review"
+  "breaking-change|#e11d21|Critical infrastructure changes, breaking adjustments, or API removals"
+  "bugfix|#d73a4a|Code corrections or hotfixes resolving functional issues"
+  "feature|#0e8a16|New functionality or enhancements to existing features"
+  "science|#5319e7|Domain-specific mathematical changes or model updates"
+  "technical|#f9d0c4|Deep algorithmic optimizations or background logic shifts"
+  "documentation|#0075ca|Updates or additions to user guides, manuals, or inline comments"
+  "performance|#c2e0c6|Direct speed execution metrics or runtime improvements"
+  "optimization|#fef2c0|Memory, storage, or other resource optimizations"
+  "refactor|#d4c5f9|Code restructuring without altering external behavior"
 )
 
 # -- Add labels in relevant repositories
