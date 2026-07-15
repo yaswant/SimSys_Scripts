@@ -1092,7 +1092,11 @@ class ApplyMacros:
         for app_path in apps_list:
             # Ignore lfric_coupled_rivers as this is based on Jules-standalone
             # metadata which is not currently available
-            if "fcm_make" in str(app_path) or "lfric_coupled_rivers" in str(app_path):
+            if (
+                "fcm_make" in str(app_path)
+                or "lfric_coupled_rivers" in str(app_path)
+                or "coupled_rivers" in str(app_path)
+            ):
                 continue
             if not app_path.is_dir():
                 continue
