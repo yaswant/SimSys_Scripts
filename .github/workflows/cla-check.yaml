@@ -25,4 +25,3 @@ jobs:
     permissions:
       contents: read  # Required to evaluate the event trigger metadata safely
       pull-requests: write  # Required for the downstream engine to post status comments on the PR
-
